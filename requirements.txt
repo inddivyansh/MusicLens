@@ -29,5 +29,7 @@ python-dotenv==1.2.3
 # --- Dataset Download ---
 kagglehub==1.0.2
 
-# --- Utilities ---
+# --- Utilities & Testing ---
 tqdm==4.70.0
+joblib==1.5.3
+pytest==9.1.1

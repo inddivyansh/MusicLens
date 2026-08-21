@@ -22,7 +22,11 @@ clean_and_preprocess = clean_module.clean_and_preprocess
 FEATURE_BOUNDS = clean_module.FEATURE_BOUNDS
 
 from pipeline.config import CLEANED_DATA_DIR, RAW_DATA_DIR, AUDIO_FEATURE_COLS
-from pipeline.utils.stats import compute_distribution_metrics, compute_correlations_with_target, test_genre_differences
+from pipeline.utils.stats import (
+    compute_distribution_metrics,
+    compute_correlations_with_target,
+    test_genre_differences as calculate_genre_differences,
+)
 
 
 class TestDataPreprocessing(unittest.TestCase):
@@ -128,7 +132,7 @@ class TestStatisticalUtilities(unittest.TestCase):
             "genre": ["pop"] * 20 + ["rock"] * 20,
             "feature": [0.8] * 20 + [0.2] * 20  # Completely separated groups
         })
-        results = test_genre_differences(df, ["feature"], genre_col="genre")
+        results = calculate_genre_differences(df, ["feature"], genre_col="genre")
         self.assertIn("feature", results)
         self.assertTrue(results["feature"]["anova_significant"])
         self.assertTrue(results["feature"]["kruskal_significant"])

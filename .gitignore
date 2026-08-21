@@ -2,6 +2,15 @@
 # MusicLens .gitignore
 # ============================================================
 
+# --- Environment & secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+kaggle.json
+
 # --- Python ---
 __pycache__/
 *.py[cod]
@@ -9,55 +18,83 @@ __pycache__/
 *.so
 *.egg-info/
 *.egg
-dist/
-build/
 *.whl
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
 
 # --- Virtual environments ---
 .venv/
+.venv
 venv/
+venv
 ENV/
 
-# --- Data files (never commit datasets) ---
+# --- Test / coverage / type-check caches ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+nosetests.xml
+
+# --- Data & local datasets (never commit) ---
 data/
 *.csv
 *.parquet
 *.pkl
 *.joblib
 *.h5
+*.hdf5
 archive.zip
 
-# --- Environment & secrets ---
-.env
-.env.local
-.env.*.local
-*.pem
-
-# --- IDE ---
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# --- OS ---
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# --- Node.js / Next.js ---
+# --- Node.js / Vite ---
 node_modules/
-frontend/.next/
-frontend/out/
-frontend/.env.local
+frontend/dist/
+frontend/.vite/
+frontend/.turbo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Hosting / local tooling ---
+.vercel/
+*.local
 
 # --- Jupyter ---
 .ipynb_checkpoints/
 *.ipynb_checkpoints/
 
-# --- Misc ---
+# --- IDE / editor ---
+.vscode/
+.vscode
+.idea/
+.idea
+*.swp
+*.swo
+*~
+*.code-workspace
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# --- Logs & misc generated ---
 *.log
 *.cache
-.pytest_cache/
-htmlcov/
-.coverage
+*.tmp
+*.temp
+dist/
+build/
+
+# --- Frontend static analytics (keep JSON, drop images) ---
+# data/*.csv is ignored above; these JSON files are the deployed payload.
+!frontend/public/analytics/
+!frontend/public/analytics/*.json
+frontend/public/analytics/*.png

@@ -24,7 +24,6 @@ from scipy import stats
 from pipeline.config import (
     CLEANED_DATA_DIR,
     EXPORTS_DIR,
-    FRONTEND_ANALYTICS_DIR,
     AUDIO_FEATURE_COLS,
     RECOMMENDATION_FEATURES,
 )
@@ -59,7 +58,6 @@ def run_eda() -> Dict[str, Any]:
     # Destination directories
     figures_dir = EXPORTS_DIR / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
-    FRONTEND_ANALYTICS_DIR.mkdir(parents=True, exist_ok=True)
 
     eda_results: Dict[str, Any] = {}
 
@@ -338,25 +336,20 @@ def run_eda() -> Dict[str, Any]:
 
     # 1. Genre distribution
     plot_genre_distribution(df, figures_dir / "01_genre_distribution.png")
-    plot_genre_distribution(df, FRONTEND_ANALYTICS_DIR / "genre_distribution.png")
 
     # 2. Genre popularity comparison (Violin & CI Bar)
     plot_genre_popularity_comparison(df, figures_dir / "02_genre_popularity_comparison.png")
-    plot_genre_popularity_comparison(df, FRONTEND_ANALYTICS_DIR / "genre_popularity_comparison.png")
 
     # 3. Audio feature distributions grid
     plot_feature_distributions(tracks_unique, ["track_popularity"] + AUDIO_FEATURE_COLS, figures_dir / "03_feature_distributions.png")
-    plot_feature_distributions(tracks_unique, ["track_popularity"] + AUDIO_FEATURE_COLS, FRONTEND_ANALYTICS_DIR / "feature_distributions.png")
 
     # 4. Correlation heatmap
     plot_correlation_heatmap(tracks_unique, ["track_popularity"] + AUDIO_FEATURE_COLS, figures_dir / "04_correlation_heatmap.png")
-    plot_correlation_heatmap(tracks_unique, ["track_popularity"] + AUDIO_FEATURE_COLS, FRONTEND_ANALYTICS_DIR / "correlation_heatmap.png")
 
     # 5. Genre radar profiles
     plot_genre_radar_profile(df, RECOMMENDATION_FEATURES, "playlist_genre", figures_dir / "05_genre_radar_profile.png")
-    plot_genre_radar_profile(df, RECOMMENDATION_FEATURES, "playlist_genre", FRONTEND_ANALYTICS_DIR / "genre_radar_profile.png")
 
-    print("[Viz] Successfully saved charts to data/exports/figures/ and frontend/public/analytics/")
+    print("[Viz] Successfully saved charts to data/exports/figures/")
 
     # -----------------------------------------------------------------------
     # EXPORT STRUCTURED ARTIFACTS (JSON / CSV)
@@ -365,10 +358,7 @@ def run_eda() -> Dict[str, Any]:
 
     # 1. eda_summary.json
     eda_json_path = EXPORTS_DIR / "eda_summary.json"
-    frontend_eda_json = FRONTEND_ANALYTICS_DIR / "eda_summary.json"
     with open(eda_json_path, "w", encoding="utf-8") as f:
-        json.dump(eda_results, f, indent=2)
-    with open(frontend_eda_json, "w", encoding="utf-8") as f:
         json.dump(eda_results, f, indent=2)
 
     # 2. genre_metrics.csv & .json
@@ -377,27 +367,19 @@ def run_eda() -> Dict[str, Any]:
     genre_metrics_df.to_csv(EXPORTS_DIR / "genre_metrics.csv", index=False)
     with open(EXPORTS_DIR / "genre_metrics.json", "w", encoding="utf-8") as f:
         json.dump(genre_metrics_df.to_dict(orient="records"), f, indent=2)
-    with open(FRONTEND_ANALYTICS_DIR / "genre_metrics.json", "w", encoding="utf-8") as f:
-        json.dump(genre_metrics_df.to_dict(orient="records"), f, indent=2)
 
     # 3. artist_metrics.csv & .json (top 100 artists)
     artist_metrics_df = artist_agg[artist_agg["track_count"] >= 3].sort_values(by="mean_popularity", ascending=False).head(100)
     artist_metrics_df.to_csv(EXPORTS_DIR / "artist_metrics.csv", index=False)
     with open(EXPORTS_DIR / "artist_metrics.json", "w", encoding="utf-8") as f:
         json.dump(artist_metrics_df.to_dict(orient="records"), f, indent=2)
-    with open(FRONTEND_ANALYTICS_DIR / "artist_metrics.json", "w", encoding="utf-8") as f:
-        json.dump(artist_metrics_df.to_dict(orient="records"), f, indent=2)
 
     # 4. feature_distributions.json
     with open(EXPORTS_DIR / "feature_distributions.json", "w", encoding="utf-8") as f:
         json.dump(feature_dist_records, f, indent=2)
-    with open(FRONTEND_ANALYTICS_DIR / "feature_distributions.json", "w", encoding="utf-8") as f:
-        json.dump(feature_dist_records, f, indent=2)
 
     # 5. correlation_matrix.json
     with open(EXPORTS_DIR / "correlation_matrix.json", "w", encoding="utf-8") as f:
-        json.dump(full_corr_matrix, f, indent=2)
-    with open(FRONTEND_ANALYTICS_DIR / "correlation_matrix.json", "w", encoding="utf-8") as f:
         json.dump(full_corr_matrix, f, indent=2)
 
     print("[Export] All analytical artifacts exported successfully.")

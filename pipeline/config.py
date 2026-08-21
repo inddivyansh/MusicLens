@@ -34,7 +34,7 @@ for dir_path in [RAW_DATA_DIR, CLEANED_DATA_DIR, EXPORTS_DIR]:
 # ---------------------------------------------------------------------------
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
-    "postgresql://localhost:5432/musiclens"  # fallback for local PG
+    "postgresql+psycopg2://localhost:5432/musiclens"  # fallback for local PG
 )
 
 # ---------------------------------------------------------------------------
