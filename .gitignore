@@ -1,0 +1,63 @@
+# ============================================================
+# MusicLens .gitignore
+# ============================================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# --- Virtual environments ---
+.venv/
+venv/
+ENV/
+
+# --- Data files (never commit datasets) ---
+data/
+*.csv
+*.parquet
+*.pkl
+*.joblib
+*.h5
+archive.zip
+
+# --- Environment & secrets ---
+.env
+.env.local
+.env.*.local
+*.pem
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Node.js / Next.js ---
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+
+# --- Misc ---
+*.log
+*.cache
+.pytest_cache/
+htmlcov/
+.coverage

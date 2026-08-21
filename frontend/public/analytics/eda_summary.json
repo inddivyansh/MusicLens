@@ -1,0 +1,1275 @@
+{
+  "q1_song_counts": {
+    "total_playlist_entries": 32828,
+    "unique_tracks": 28352,
+    "multi_playlist_track_count": 3165,
+    "multi_playlist_track_pct": 11.16,
+    "max_playlist_appearances": 10,
+    "interpretation": "The dataset contains 32,828 track-playlist associations representing 28,352 unique songs. 3,165 songs (11.2%) appear in multiple playlists across subgenres, with the most cross-listed track appearing in 10 playlists."
+  },
+  "q2_artist_counts": {
+    "unique_artists": 10692,
+    "mean_tracks_per_artist": 2.65,
+    "median_tracks_per_artist": 1,
+    "top_10_artists_by_catalog": {
+      "Queen": 130,
+      "Martin Garrix": 87,
+      "Don Omar": 84,
+      "David Guetta": 81,
+      "Hardwell": 68,
+      "Drake": 68,
+      "Dimitri Vegas & Like Mike": 68,
+      "The Chainsmokers": 66,
+      "Logic": 65,
+      "Guns N' Roses": 63
+    },
+    "interpretation": "There are 10,692 unique artists in the catalog. The catalog distribution is long-tailed: the median artist has 1 song in the dataset, while top prolific artists like Queen have 130 unique songs."
+  },
+  "q3_q4_genre_distribution": {
+    "macro_genres_count": 6,
+    "subgenres_count": 24,
+    "genre_breakdown": [
+      {
+        "genre": "edm",
+        "total_entries": 6043,
+        "pct_total_entries": 18.41,
+        "unique_tracks": 5537,
+        "subgenres": [
+          "electro house",
+          "big room",
+          "pop edm",
+          "progressive electro house"
+        ]
+      },
+      {
+        "genre": "rap",
+        "total_entries": 5743,
+        "pct_total_entries": 17.49,
+        "unique_tracks": 5483,
+        "subgenres": [
+          "hip hop",
+          "southern hip hop",
+          "gangster rap",
+          "trap"
+        ]
+      },
+      {
+        "genre": "pop",
+        "total_entries": 5507,
+        "pct_total_entries": 16.78,
+        "unique_tracks": 5132,
+        "subgenres": [
+          "dance pop",
+          "post-teen pop",
+          "electropop",
+          "indie poptimism"
+        ]
+      },
+      {
+        "genre": "r&b",
+        "total_entries": 5431,
+        "pct_total_entries": 16.54,
+        "unique_tracks": 5138,
+        "subgenres": [
+          "urban contemporary",
+          "hip pop",
+          "new jack swing",
+          "neo soul"
+        ]
+      },
+      {
+        "genre": "latin",
+        "total_entries": 5153,
+        "pct_total_entries": 15.7,
+        "unique_tracks": 4639,
+        "subgenres": [
+          "tropical",
+          "latin pop",
+          "reggaeton",
+          "latin hip hop"
+        ]
+      },
+      {
+        "genre": "rock",
+        "total_entries": 4951,
+        "pct_total_entries": 15.08,
+        "unique_tracks": 4451,
+        "subgenres": [
+          "album rock",
+          "classic rock",
+          "permanent wave",
+          "hard rock"
+        ]
+      }
+    ],
+    "largest_genre_by_entries": "edm",
+    "interpretation": "The dataset is divided into 6 macro-genres and 24 subgenres (4 subgenres per macro-genre). 'EDM' contains the most playlist entries (6,043, 18.4%), followed closely by 'RAP' (5,743) and 'POP' (5,507). The dataset is well-balanced across all 6 genres, with each representing 15% to 18.5% of total entries."
+  },
+  "q5_genre_popularity": {
+    "rankings": [
+      {
+        "genre": "pop",
+        "count": 5507,
+        "mean_popularity": 47.74,
+        "std_popularity": 25.16,
+        "ci_95": [
+          47.08,
+          48.41
+        ],
+        "median_popularity": 52.0,
+        "iqr_popularity": 37.0
+      },
+      {
+        "genre": "latin",
+        "count": 5153,
+        "mean_popularity": 47.04,
+        "std_popularity": 25.41,
+        "ci_95": [
+          46.35,
+          47.74
+        ],
+        "median_popularity": 50.0,
+        "iqr_popularity": 35.0
+      },
+      {
+        "genre": "rap",
+        "count": 5743,
+        "mean_popularity": 43.24,
+        "std_popularity": 23.29,
+        "ci_95": [
+          42.64,
+          43.84
+        ],
+        "median_popularity": 47.0,
+        "iqr_popularity": 30.0
+      },
+      {
+        "genre": "rock",
+        "count": 4951,
+        "mean_popularity": 41.73,
+        "std_popularity": 24.83,
+        "ci_95": [
+          41.04,
+          42.42
+        ],
+        "median_popularity": 46.0,
+        "iqr_popularity": 42.0
+      },
+      {
+        "genre": "r&b",
+        "count": 5431,
+        "mean_popularity": 41.22,
+        "std_popularity": 25.89,
+        "ci_95": [
+          40.53,
+          41.91
+        ],
+        "median_popularity": 44.0,
+        "iqr_popularity": 42.0
+      },
+      {
+        "genre": "edm",
+        "count": 6043,
+        "mean_popularity": 34.83,
+        "std_popularity": 23.15,
+        "ci_95": [
+          34.25,
+          35.42
+        ],
+        "median_popularity": 36.0,
+        "iqr_popularity": 34.0
+      }
+    ],
+    "highest_genre": "pop",
+    "lowest_genre": "edm",
+    "anova_f_statistic": 207.62,
+    "anova_p_value": 1.0140836645179766e-218,
+    "kruskal_h_statistic": 1131.27,
+    "kruskal_p_value": 2.259805185729745e-242,
+    "statistically_significant": true,
+    "interpretation": "'POP' achieves the highest mean popularity (47.74 \u00b1 0.67), closely followed by 'LATIN' (47.04) and 'RAP' (43.24). 'EDM' has the lowest mean popularity (34.83). One-way ANOVA (F = 207.6, p < 0.001) and Kruskal-Wallis (H = 1131.3, p < 0.001) confirm statistically significant popularity variance across genres."
+  },
+  "q6_artist_popularity": {
+    "top_artists_min_5_tracks": [
+      {
+        "track_artist": "DaBaby",
+        "track_count": 6,
+        "mean_popularity": 83.67,
+        "median_popularity": 86.5,
+        "std_popularity": 8.48
+      },
+      {
+        "track_artist": "Roddy Ricch",
+        "track_count": 7,
+        "mean_popularity": 83.43,
+        "median_popularity": 81.0,
+        "std_popularity": 6.73
+      },
+      {
+        "track_artist": "Harry Styles",
+        "track_count": 9,
+        "mean_popularity": 81.78,
+        "median_popularity": 86.0,
+        "std_popularity": 8.79
+      },
+      {
+        "track_artist": "YNW Melly",
+        "track_count": 7,
+        "mean_popularity": 81.57,
+        "median_popularity": 80.0,
+        "std_popularity": 5.19
+      },
+      {
+        "track_artist": "Billie Eilish",
+        "track_count": 26,
+        "mean_popularity": 76.96,
+        "median_popularity": 81.0,
+        "std_popularity": 17.15
+      },
+      {
+        "track_artist": "Lewis Capaldi",
+        "track_count": 9,
+        "mean_popularity": 76.89,
+        "median_popularity": 70.0,
+        "std_popularity": 11.36
+      },
+      {
+        "track_artist": "Alec Benjamin",
+        "track_count": 6,
+        "mean_popularity": 76.83,
+        "median_popularity": 77.5,
+        "std_popularity": 8.16
+      },
+      {
+        "track_artist": "Dimelo Flow",
+        "track_count": 5,
+        "mean_popularity": 76.8,
+        "median_popularity": 75.0,
+        "std_popularity": 10.03
+      },
+      {
+        "track_artist": "Rich Music LTD",
+        "track_count": 6,
+        "mean_popularity": 76.5,
+        "median_popularity": 79.0,
+        "std_popularity": 12.85
+      },
+      {
+        "track_artist": "Twenty One Pilots",
+        "track_count": 8,
+        "mean_popularity": 76.12,
+        "median_popularity": 76.0,
+        "std_popularity": 5.38
+      },
+      {
+        "track_artist": "TINI",
+        "track_count": 5,
+        "mean_popularity": 76.0,
+        "median_popularity": 74.0,
+        "std_popularity": 5.15
+      },
+      {
+        "track_artist": "Doja Cat",
+        "track_count": 8,
+        "mean_popularity": 74.75,
+        "median_popularity": 74.5,
+        "std_popularity": 10.89
+      },
+      {
+        "track_artist": "Tones and I",
+        "track_count": 10,
+        "mean_popularity": 74.6,
+        "median_popularity": 72.0,
+        "std_popularity": 15.64
+      },
+      {
+        "track_artist": "Green Day",
+        "track_count": 10,
+        "mean_popularity": 73.2,
+        "median_popularity": 75.0,
+        "std_popularity": 5.2
+      },
+      {
+        "track_artist": "iann dior",
+        "track_count": 5,
+        "mean_popularity": 73.2,
+        "median_popularity": 73.0,
+        "std_popularity": 5.26
+      }
+    ],
+    "top_artists_unfiltered_sample": [
+      {
+        "track_artist": "Trevor Daniel",
+        "track_count": 1,
+        "mean_popularity": 97.0,
+        "median_popularity": 97.0,
+        "std_popularity": 0.0
+      },
+      {
+        "track_artist": "Y2K",
+        "track_count": 1,
+        "mean_popularity": 91.0,
+        "median_popularity": 91.0,
+        "std_popularity": 0.0
+      },
+      {
+        "track_artist": "Don Toliver",
+        "track_count": 2,
+        "mean_popularity": 87.5,
+        "median_popularity": 87.5,
+        "std_popularity": 6.36
+      },
+      {
+        "track_artist": "Kina",
+        "track_count": 2,
+        "mean_popularity": 85.5,
+        "median_popularity": 85.5,
+        "std_popularity": 0.71
+      },
+      {
+        "track_artist": "JACKBOYS",
+        "track_count": 3,
+        "mean_popularity": 84.33,
+        "median_popularity": 84.0,
+        "std_popularity": 2.52
+      },
+      {
+        "track_artist": "Dad\u00e1 Bolad\u00e3o",
+        "track_count": 1,
+        "mean_popularity": 84.0,
+        "median_popularity": 84.0,
+        "std_popularity": 0.0
+      },
+      {
+        "track_artist": "DaBaby",
+        "track_count": 6,
+        "mean_popularity": 83.67,
+        "median_popularity": 86.5,
+        "std_popularity": 8.48
+      },
+      {
+        "track_artist": "Roddy Ricch",
+        "track_count": 7,
+        "mean_popularity": 83.43,
+        "median_popularity": 81.0,
+        "std_popularity": 6.73
+      },
+      {
+        "track_artist": "Baby Keem",
+        "track_count": 1,
+        "mean_popularity": 83.0,
+        "median_popularity": 83.0,
+        "std_popularity": 0.0
+      },
+      {
+        "track_artist": "Internet Money",
+        "track_count": 1,
+        "mean_popularity": 83.0,
+        "median_popularity": 83.0,
+        "std_popularity": 0.0
+      }
+    ],
+    "top_artist_name": "DaBaby",
+    "top_artist_popularity": 83.67,
+    "interpretation": "When controlling for sample size (>= 5 tracks), 'DaBaby' ranks #1 in average popularity (83.67 across 6 tracks), followed by 'Roddy Ricch' (83.43) and 'Harry Styles' (81.78). Enforcing a track-count threshold is essential in music analytics to prevent 1-song viral hits from skewing career-level artist rankings."
+  },
+  "q7_feature_distributions": {
+    "track_popularity": {
+      "count": 28352,
+      "mean": 39.3353,
+      "std": 23.6994,
+      "median": 42.0,
+      "q25": 21.0,
+      "q75": 58.0,
+      "iqr": 37.0,
+      "min": 0.0,
+      "max": 100.0,
+      "skewness": -0.2315,
+      "kurtosis": -0.9807,
+      "skew_description": "approximately symmetric",
+      "ci_95": [
+        39.0595,
+        39.6112
+      ],
+      "outliers_mild_count": 0,
+      "outliers_mild_pct": 0.0,
+      "outliers_extreme_count": 0,
+      "outliers_extreme_pct": 0.0,
+      "iqr_lower_fence": -34.5,
+      "iqr_upper_fence": 113.5
+    },
+    "duration_ms": {
+      "count": 28352,
+      "mean": 226574.6311,
+      "std": 61081.3637,
+      "median": 216933.0,
+      "q25": 187741.25,
+      "q75": 254975.25,
+      "iqr": 67234.0,
+      "min": 4000.0,
+      "max": 517810.0,
+      "skewness": 1.1152,
+      "kurtosis": 2.5434,
+      "skew_description": "highly skewed (positive/right)",
+      "ci_95": [
+        225863.6256,
+        227285.6366
+      ],
+      "outliers_mild_count": 1197,
+      "outliers_mild_pct": 4.22,
+      "outliers_extreme_count": 191,
+      "outliers_extreme_pct": 0.67,
+      "iqr_lower_fence": 86890.25,
+      "iqr_upper_fence": 355826.25
+    },
+    "danceability": {
+      "count": 28352,
+      "mean": 0.6534,
+      "std": 0.1458,
+      "median": 0.67,
+      "q25": 0.561,
+      "q75": 0.76,
+      "iqr": 0.199,
+      "min": 0.0,
+      "max": 0.983,
+      "skewness": -0.5058,
+      "kurtosis": 0.0159,
+      "skew_description": "moderately skewed (negative)",
+      "ci_95": [
+        0.6517,
+        0.6551
+      ],
+      "outliers_mild_count": 257,
+      "outliers_mild_pct": 0.91,
+      "outliers_extreme_count": 0,
+      "outliers_extreme_pct": 0.0,
+      "iqr_lower_fence": 0.2625,
+      "iqr_upper_fence": 1.0585
+    },
+    "energy": {
+      "count": 28352,
+      "mean": 0.6984,
+      "std": 0.1835,
+      "median": 0.722,
+      "q25": 0.579,
+      "q75": 0.843,
+      "iqr": 0.264,
+      "min": 0.0002,
+      "max": 1.0,
+      "skewness": -0.6453,
+      "kurtosis": -0.0093,
+      "skew_description": "moderately skewed (negative)",
+      "ci_95": [
+        0.6962,
+        0.7005
+      ],
+      "outliers_mild_count": 222,
+      "outliers_mild_pct": 0.78,
+      "outliers_extreme_count": 0,
+      "outliers_extreme_pct": 0.0,
+      "iqr_lower_fence": 0.183,
+      "iqr_upper_fence": 1.239
+    },
+    "key": {
+      "count": 28352,
+      "mean": 5.3674,
+      "std": 3.6137,
+      "median": 6.0,
+      "q25": 2.0,
+      "q75": 9.0,
+      "iqr": 7.0,
+      "min": 0.0,
+      "max": 11.0,
+      "skewness": -0.0201,
+      "kurtosis": -1.3098,
+      "skew_description": "approximately symmetric",
+      "ci_95": [
+        5.3254,
+        5.4095
+      ],
+      "outliers_mild_count": 0,
+      "outliers_mild_pct": 0.0,
+      "outliers_extreme_count": 0,
+      "outliers_extreme_pct": 0.0,
+      "iqr_lower_fence": -8.5,
+      "iqr_upper_fence": 19.5
+    },
+    "loudness": {
+      "count": 28352,
+      "mean": -6.8178,
+      "std": 3.0364,
+      "median": -6.261,
+      "q25": -8.3102,
+      "q75": -4.7088,
+      "iqr": 3.6015,
+      "min": -46.448,
+      "max": 1.275,
+      "skewness": -1.3592,
+      "kurtosis": 4.5791,
+      "skew_description": "highly skewed (negative/left)",
+      "ci_95": [
+        -6.8531,
+        -6.7824
+      ],
+      "outliers_mild_count": 837,
+      "outliers_mild_pct": 2.95,
+      "outliers_extreme_count": 88,
+      "outliers_extreme_pct": 0.31,
+      "iqr_lower_fence": -13.7125,
+      "iqr_upper_fence": 0.6935
+    },
+    "mode": {
+      "count": 28352,
+      "mean": 0.5655,
+      "std": 0.4957,
+      "median": 1.0,
+      "q25": 0.0,
+      "q75": 1.0,
+      "iqr": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "skewness": -0.2644,
+      "kurtosis": -1.9302,
+      "skew_description": "approximately symmetric",
+      "ci_95": [
+        0.5598,
+        0.5713
+      ],
+      "outliers_mild_count": 0,
+      "outliers_mild_pct": 0.0,
+      "outliers_extreme_count": 0,
+      "outliers_extreme_pct": 0.0,
+      "iqr_lower_fence": -1.5,
+      "iqr_upper_fence": 2.5
+    },
+    "speechiness": {
+      "count": 28352,
+      "mean": 0.1079,
+      "std": 0.1025,
+      "median": 0.0626,
+      "q25": 0.041,
+      "q75": 0.133,
+      "iqr": 0.092,
+      "min": 0.0,
+      "max": 0.918,
+      "skewness": 1.9656,
+      "kurtosis": 4.2692,
+      "skew_description": "highly skewed (positive/right)",
+      "ci_95": [
+        0.1067,
+        0.1091
+      ],
+      "outliers_mild_count": 2723,
+      "outliers_mild_pct": 9.6,
+      "outliers_extreme_count": 568,
+      "outliers_extreme_pct": 2.0,
+      "iqr_lower_fence": -0.097,
+      "iqr_upper_fence": 0.271
+    },
+    "acousticness": {
+      "count": 28352,
+      "mean": 0.1772,
+      "std": 0.2228,
+      "median": 0.0797,
+      "q25": 0.0143,
+      "q75": 0.26,
+      "iqr": 0.2457,
+      "min": 0.0,
+      "max": 0.994,
+      "skewness": 1.5765,
+      "kurtosis": 1.7764,
+      "skew_description": "highly skewed (positive/right)",
+      "ci_95": [
+        0.1746,
+        0.1798
+      ],
+      "outliers_mild_count": 1911,
+      "outliers_mild_pct": 6.74,
+      "outliers_extreme_count": 0,
+      "outliers_extreme_pct": 0.0,
+      "iqr_lower_fence": -0.3543,
+      "iqr_upper_fence": 0.6285
+    },
+    "instrumentalness": {
+      "count": 28352,
+      "mean": 0.0911,
+      "std": 0.2326,
+      "median": 0.0,
+      "q25": 0.0,
+      "q75": 0.0066,
+      "iqr": 0.0066,
+      "min": 0.0,
+      "max": 0.994,
+      "skewness": 2.6247,
+      "kurtosis": 5.4924,
+      "skew_description": "highly skewed (positive/right)",
+      "ci_95": [
+        0.0884,
+        0.0938
+      ],
+      "outliers_mild_count": 6085,
+      "outliers_mild_pct": 21.46,
+      "outliers_extreme_count": 5637,
+      "outliers_extreme_pct": 19.88,
+      "iqr_lower_fence": -0.0099,
+      "iqr_upper_fence": 0.0164
+    },
+    "liveness": {
+      "count": 28352,
+      "mean": 0.191,
+      "std": 0.1559,
+      "median": 0.127,
+      "q25": 0.0926,
+      "q75": 0.249,
+      "iqr": 0.1564,
+      "min": 0.0,
+      "max": 0.996,
+      "skewness": 2.0817,
+      "kurtosis": 5.08,
+      "skew_description": "highly skewed (positive/right)",
+      "ci_95": [
+        0.1891,
+        0.1928
+      ],
+      "outliers_mild_count": 1622,
+      "outliers_mild_pct": 5.72,
+      "outliers_extreme_count": 458,
+      "outliers_extreme_pct": 1.62,
+      "iqr_lower_fence": -0.142,
+      "iqr_upper_fence": 0.4836
+    },
+    "valence": {
+      "count": 28352,
+      "mean": 0.5104,
+      "std": 0.2343,
+      "median": 0.512,
+      "q25": 0.329,
+      "q75": 0.695,
+      "iqr": 0.366,
+      "min": 0.0,
+      "max": 0.991,
+      "skewness": -0.0073,
+      "kurtosis": -0.9088,
+      "skew_description": "approximately symmetric",
+      "ci_95": [
+        0.5077,
+        0.5131
+      ],
+      "outliers_mild_count": 0,
+      "outliers_mild_pct": 0.0,
+      "outliers_extreme_count": 0,
+      "outliers_extreme_pct": 0.0,
+      "iqr_lower_fence": -0.22,
+      "iqr_upper_fence": 1.244
+    },
+    "tempo": {
+      "count": 28352,
+      "mean": 120.9582,
+      "std": 26.9545,
+      "median": 121.9935,
+      "q25": 99.972,
+      "q75": 133.999,
+      "iqr": 34.027,
+      "min": 0.0,
+      "max": 239.44,
+      "skewness": 0.5139,
+      "kurtosis": 0.0829,
+      "skew_description": "moderately skewed (positive)",
+      "ci_95": [
+        120.6445,
+        121.272
+      ],
+      "outliers_mild_count": 494,
+      "outliers_mild_pct": 1.74,
+      "outliers_extreme_count": 1,
+      "outliers_extreme_pct": 0.0,
+      "iqr_lower_fence": 48.9315,
+      "iqr_upper_fence": 185.0395
+    }
+  },
+  "q8_correlations": {
+    "correlation_with_popularity": [
+      {
+        "feature": "instrumentalness",
+        "pearson_r": -0.1245,
+        "pearson_p_value": 2.177637687759219e-98,
+        "pearson_significant": true,
+        "spearman_rho": -0.1658,
+        "spearman_p_value": 7.905815079970895e-174,
+        "spearman_significant": true,
+        "correlation_strength": "weak",
+        "direction": "negative"
+      },
+      {
+        "feature": "energy",
+        "pearson_r": -0.1035,
+        "pearson_p_value": 2.2064491889608166e-68,
+        "pearson_significant": true,
+        "spearman_rho": -0.1102,
+        "spearman_p_value": 2.548285643182242e-77,
+        "spearman_significant": true,
+        "correlation_strength": "weak",
+        "direction": "negative"
+      },
+      {
+        "feature": "acousticness",
+        "pearson_r": 0.0916,
+        "pearson_p_value": 6.492961197306614e-54,
+        "pearson_significant": true,
+        "spearman_rho": 0.1245,
+        "spearman_p_value": 2.4715031829251424e-98,
+        "spearman_significant": true,
+        "correlation_strength": "negligible",
+        "direction": "positive"
+      },
+      {
+        "feature": "liveness",
+        "pearson_r": -0.0528,
+        "pearson_p_value": 6.202812140416524e-19,
+        "pearson_significant": true,
+        "spearman_rho": -0.0292,
+        "spearman_p_value": 8.61690055634745e-07,
+        "spearman_significant": true,
+        "correlation_strength": "negligible",
+        "direction": "negative"
+      },
+      {
+        "feature": "danceability",
+        "pearson_r": 0.0466,
+        "pearson_p_value": 4.2906356941723514e-15,
+        "pearson_significant": true,
+        "spearman_rho": 0.0466,
+        "spearman_p_value": 4.3106766823001345e-15,
+        "spearman_significant": true,
+        "correlation_strength": "negligible",
+        "direction": "positive"
+      },
+      {
+        "feature": "loudness",
+        "pearson_r": 0.0373,
+        "pearson_p_value": 3.2010984015272934e-10,
+        "pearson_significant": true,
+        "spearman_rho": 0.0452,
+        "spearman_p_value": 2.5189875265105462e-14,
+        "spearman_significant": true,
+        "correlation_strength": "negligible",
+        "direction": "positive"
+      },
+      {
+        "feature": "valence",
+        "pearson_r": 0.0226,
+        "pearson_p_value": 0.00014194383714566698,
+        "pearson_significant": true,
+        "spearman_rho": 0.0258,
+        "spearman_p_value": 1.3492455175022398e-05,
+        "spearman_significant": true,
+        "correlation_strength": "negligible",
+        "direction": "positive"
+      },
+      {
+        "feature": "mode",
+        "pearson_r": 0.0161,
+        "pearson_p_value": 0.006604588715366107,
+        "pearson_significant": true,
+        "spearman_rho": 0.0176,
+        "spearman_p_value": 0.0030801525834468035,
+        "spearman_significant": true,
+        "correlation_strength": "negligible",
+        "direction": "positive"
+      },
+      {
+        "feature": "key",
+        "pearson_r": -0.0079,
+        "pearson_p_value": 0.18462683512842681,
+        "pearson_significant": false,
+        "spearman_rho": -0.0082,
+        "spearman_p_value": 0.16804489562072736,
+        "spearman_significant": false,
+        "correlation_strength": "negligible",
+        "direction": "negative"
+      },
+      {
+        "feature": "speechiness",
+        "pearson_r": 0.0054,
+        "pearson_p_value": 0.3597277688668385,
+        "pearson_significant": false,
+        "spearman_rho": 0.0013,
+        "spearman_p_value": 0.8277231201180066,
+        "spearman_significant": false,
+        "correlation_strength": "negligible",
+        "direction": "positive"
+      },
+      {
+        "feature": "tempo",
+        "pearson_r": 0.0043,
+        "pearson_p_value": 0.46681120591610115,
+        "pearson_significant": false,
+        "spearman_rho": -0.0097,
+        "spearman_p_value": 0.10410605556959152,
+        "spearman_significant": false,
+        "correlation_strength": "negligible",
+        "direction": "positive"
+      }
+    ],
+    "full_pearson_matrix": {
+      "track_popularity": {
+        "track_popularity": 1.0,
+        "danceability": 0.0466,
+        "energy": -0.1035,
+        "key": -0.0079,
+        "loudness": 0.0373,
+        "mode": 0.0161,
+        "speechiness": 0.0054,
+        "acousticness": 0.0916,
+        "instrumentalness": -0.1245,
+        "liveness": -0.0528,
+        "valence": 0.0226,
+        "tempo": 0.0043
+      },
+      "danceability": {
+        "track_popularity": 0.0466,
+        "danceability": 1.0,
+        "energy": -0.0814,
+        "key": 0.0071,
+        "loudness": 0.0153,
+        "mode": -0.0553,
+        "speechiness": 0.1836,
+        "acousticness": -0.0289,
+        "instrumentalness": -0.0023,
+        "liveness": -0.1271,
+        "valence": 0.3338,
+        "tempo": -0.1846
+      },
+      "energy": {
+        "track_popularity": -0.1035,
+        "danceability": -0.0814,
+        "energy": 1.0,
+        "key": 0.0128,
+        "loudness": 0.6822,
+        "mode": -0.0043,
+        "speechiness": -0.029,
+        "acousticness": -0.5459,
+        "instrumentalness": 0.0239,
+        "liveness": 0.1638,
+        "valence": 0.1497,
+        "tempo": 0.1517
+      },
+      "key": {
+        "track_popularity": -0.0079,
+        "danceability": 0.0071,
+        "energy": 0.0128,
+        "key": 1.0,
+        "loudness": -0.0006,
+        "mode": -0.176,
+        "speechiness": 0.023,
+        "acousticness": 0.0043,
+        "instrumentalness": 0.0075,
+        "liveness": 0.0021,
+        "valence": 0.0216,
+        "tempo": -0.0103
+      },
+      "loudness": {
+        "track_popularity": 0.0373,
+        "danceability": 0.0153,
+        "energy": 0.6822,
+        "key": -0.0006,
+        "loudness": 1.0,
+        "mode": -0.0176,
+        "speechiness": 0.0129,
+        "acousticness": -0.3716,
+        "instrumentalness": -0.1543,
+        "liveness": 0.0819,
+        "valence": 0.0495,
+        "tempo": 0.0967
+      },
+      "mode": {
+        "track_popularity": 0.0161,
+        "danceability": -0.0553,
+        "energy": -0.0043,
+        "key": -0.176,
+        "loudness": -0.0176,
+        "mode": 1.0,
+        "speechiness": -0.0596,
+        "acousticness": 0.0067,
+        "instrumentalness": -0.0058,
+        "liveness": -0.0002,
+        "valence": -0.0031,
+        "tempo": 0.0167
+      },
+      "speechiness": {
+        "track_popularity": 0.0054,
+        "danceability": 0.1836,
+        "energy": -0.029,
+        "key": 0.023,
+        "loudness": 0.0129,
+        "mode": -0.0596,
+        "speechiness": 1.0,
+        "acousticness": 0.025,
+        "instrumentalness": -0.1079,
+        "liveness": 0.0592,
+        "valence": 0.0648,
+        "tempo": 0.0328
+      },
+      "acousticness": {
+        "track_popularity": 0.0916,
+        "danceability": -0.0289,
+        "energy": -0.5459,
+        "key": 0.0043,
+        "loudness": -0.3716,
+        "mode": 0.0067,
+        "speechiness": 0.025,
+        "acousticness": 1.0,
+        "instrumentalness": -0.0031,
+        "liveness": -0.0745,
+        "valence": -0.019,
+        "tempo": -0.1144
+      },
+      "instrumentalness": {
+        "track_popularity": -0.1245,
+        "danceability": -0.0023,
+        "energy": 0.0239,
+        "key": 0.0075,
+        "loudness": -0.1543,
+        "mode": -0.0058,
+        "speechiness": -0.1079,
+        "acousticness": -0.0031,
+        "instrumentalness": 1.0,
+        "liveness": -0.0085,
+        "valence": -0.1742,
+        "tempo": 0.0215
+      },
+      "liveness": {
+        "track_popularity": -0.0528,
+        "danceability": -0.1271,
+        "energy": 0.1638,
+        "key": 0.0021,
+        "loudness": 0.0819,
+        "mode": -0.0002,
+        "speechiness": 0.0592,
+        "acousticness": -0.0745,
+        "instrumentalness": -0.0085,
+        "liveness": 1.0,
+        "valence": -0.0198,
+        "tempo": 0.0219
+      },
+      "valence": {
+        "track_popularity": 0.0226,
+        "danceability": 0.3338,
+        "energy": 0.1497,
+        "key": 0.0216,
+        "loudness": 0.0495,
+        "mode": -0.0031,
+        "speechiness": 0.0648,
+        "acousticness": -0.019,
+        "instrumentalness": -0.1742,
+        "liveness": -0.0198,
+        "valence": 1.0,
+        "tempo": -0.025
+      },
+      "tempo": {
+        "track_popularity": 0.0043,
+        "danceability": -0.1846,
+        "energy": 0.1517,
+        "key": -0.0103,
+        "loudness": 0.0967,
+        "mode": 0.0167,
+        "speechiness": 0.0328,
+        "acousticness": -0.1144,
+        "instrumentalness": 0.0215,
+        "liveness": 0.0219,
+        "valence": -0.025,
+        "tempo": 1.0
+      }
+    },
+    "interpretation": "Linear correlation between raw audio features and popularity is weak to modest: 'acousticness' exhibits the highest positive correlation (r = 0.0916, p < 0.001), while 'instrumentalness' exhibits the strongest negative correlation (r = -0.1245, p < 0.001). This indicates that commercial popularity is driven primarily by external factors (artist brand, playlist curation, marketing, lyrics) rather than isolated acoustic signatures."
+  },
+  "q9_cross_genre_differences": {
+    "hypothesis_tests": {
+      "danceability": {
+        "anova_f_stat": 1560.2,
+        "anova_p_value": 0.0,
+        "anova_significant": true,
+        "kruskal_h_stat": 6038.9,
+        "kruskal_p_value": 0.0,
+        "kruskal_significant": true,
+        "eta_squared": 0.192,
+        "effect_size": "large"
+      },
+      "energy": {
+        "anova_f_stat": 1045.99,
+        "anova_p_value": 0.0,
+        "anova_significant": true,
+        "kruskal_h_stat": 4848.76,
+        "kruskal_p_value": 0.0,
+        "kruskal_significant": true,
+        "eta_squared": 0.1374,
+        "effect_size": "medium"
+      },
+      "key": {
+        "anova_f_stat": 4.16,
+        "anova_p_value": 0.0008878488711392075,
+        "anova_significant": true,
+        "kruskal_h_stat": 21.14,
+        "kruskal_p_value": 0.0007613951878263777,
+        "kruskal_significant": true,
+        "eta_squared": 0.0006,
+        "effect_size": "small"
+      },
+      "loudness": {
+        "anova_f_stat": 572.55,
+        "anova_p_value": 0.0,
+        "anova_significant": true,
+        "kruskal_h_stat": 3103.2,
+        "kruskal_p_value": 0.0,
+        "kruskal_significant": true,
+        "eta_squared": 0.0802,
+        "effect_size": "medium"
+      },
+      "mode": {
+        "anova_f_stat": 104.95,
+        "anova_p_value": 2.843450960356344e-110,
+        "anova_significant": true,
+        "kruskal_h_stat": 516.55,
+        "kruskal_p_value": 2.1311055066811103e-109,
+        "kruskal_significant": true,
+        "eta_squared": 0.0157,
+        "effect_size": "small"
+      },
+      "speechiness": {
+        "anova_f_stat": 1664.57,
+        "anova_p_value": 0.0,
+        "anova_significant": true,
+        "kruskal_h_stat": 6351.18,
+        "kruskal_p_value": 0.0,
+        "kruskal_significant": true,
+        "eta_squared": 0.2023,
+        "effect_size": "large"
+      },
+      "acousticness": {
+        "anova_f_stat": 465.69,
+        "anova_p_value": 0.0,
+        "anova_significant": true,
+        "kruskal_h_stat": 3782.4,
+        "kruskal_p_value": 0.0,
+        "kruskal_significant": true,
+        "eta_squared": 0.0662,
+        "effect_size": "medium"
+      },
+      "instrumentalness": {
+        "anova_f_stat": 607.54,
+        "anova_p_value": 0.0,
+        "anova_significant": true,
+        "kruskal_h_stat": 3570.84,
+        "kruskal_p_value": 0.0,
+        "kruskal_significant": true,
+        "eta_squared": 0.0847,
+        "effect_size": "medium"
+      },
+      "liveness": {
+        "anova_f_stat": 53.67,
+        "anova_p_value": 1.0769159967106444e-55,
+        "anova_significant": true,
+        "kruskal_h_stat": 177.31,
+        "kruskal_p_value": 2.0103545905171634e-36,
+        "kruskal_significant": true,
+        "eta_squared": 0.0081,
+        "effect_size": "small"
+      },
+      "valence": {
+        "anova_f_stat": 497.6,
+        "anova_p_value": 0.0,
+        "anova_significant": true,
+        "kruskal_h_stat": 2272.98,
+        "kruskal_p_value": 0.0,
+        "kruskal_significant": true,
+        "eta_squared": 0.0705,
+        "effect_size": "medium"
+      },
+      "tempo": {
+        "anova_f_stat": 139.71,
+        "anova_p_value": 3.8309227146921176e-147,
+        "anova_significant": true,
+        "kruskal_h_stat": 1302.33,
+        "kruskal_p_value": 2.000019794939029e-279,
+        "kruskal_significant": true,
+        "eta_squared": 0.0208,
+        "effect_size": "small"
+      }
+    },
+    "genre_audio_profiles": {
+      "edm": {
+        "danceability": 0.655,
+        "energy": 0.802,
+        "key": 5.352,
+        "loudness": -5.427,
+        "mode": 0.52,
+        "speechiness": 0.087,
+        "acousticness": 0.082,
+        "instrumentalness": 0.219,
+        "liveness": 0.212,
+        "valence": 0.401,
+        "tempo": 125.768
+      },
+      "latin": {
+        "danceability": 0.713,
+        "energy": 0.708,
+        "key": 5.483,
+        "loudness": -6.264,
+        "mode": 0.562,
+        "speechiness": 0.103,
+        "acousticness": 0.211,
+        "instrumentalness": 0.044,
+        "liveness": 0.181,
+        "valence": 0.605,
+        "tempo": 118.631
+      },
+      "pop": {
+        "danceability": 0.639,
+        "energy": 0.701,
+        "key": 5.319,
+        "loudness": -6.315,
+        "mode": 0.588,
+        "speechiness": 0.074,
+        "acousticness": 0.171,
+        "instrumentalness": 0.06,
+        "liveness": 0.177,
+        "valence": 0.504,
+        "tempo": 120.743
+      },
+      "r&b": {
+        "danceability": 0.67,
+        "energy": 0.591,
+        "key": 5.4,
+        "loudness": -7.865,
+        "mode": 0.521,
+        "speechiness": 0.117,
+        "acousticness": 0.26,
+        "instrumentalness": 0.029,
+        "liveness": 0.175,
+        "valence": 0.531,
+        "tempo": 114.222
+      },
+      "rap": {
+        "danceability": 0.718,
+        "energy": 0.651,
+        "key": 5.469,
+        "loudness": -7.043,
+        "mode": 0.522,
+        "speechiness": 0.197,
+        "acousticness": 0.193,
+        "instrumentalness": 0.076,
+        "liveness": 0.192,
+        "valence": 0.505,
+        "tempo": 120.661
+      },
+      "rock": {
+        "danceability": 0.521,
+        "energy": 0.733,
+        "key": 5.209,
+        "loudness": -7.589,
+        "mode": 0.7,
+        "speechiness": 0.058,
+        "acousticness": 0.145,
+        "instrumentalness": 0.062,
+        "liveness": 0.203,
+        "valence": 0.537,
+        "tempo": 124.989
+      }
+    },
+    "most_distinctive_feature": "speechiness",
+    "most_distinctive_eta_sq": 0.2023,
+    "interpretation": "All 11 audio features show statistically significant differences across genres (ANOVA p < 0.001 for all). 'SPEECHINESS' exhibits the strongest genre differentiation (eta^2 = 0.2023). EDM is characterized by extreme energy (0.80) and tempo (125.8 BPM); Rap is characterized by high speechiness (0.197) and danceability (0.72); Latin leads in valence/happiness (0.60) and danceability (0.71); Rock is marked by high energy (0.73) but low speechiness (0.058)."
+  },
+  "q10_outliers": {
+    "feature_outlier_counts": {
+      "duration_ms": {
+        "mild_outliers_count": 1197,
+        "mild_outliers_pct": 4.22,
+        "extreme_outliers_count": 191,
+        "extreme_outliers_pct": 0.67,
+        "iqr_bounds": [
+          86890.25,
+          355826.25
+        ]
+      },
+      "speechiness": {
+        "mild_outliers_count": 2723,
+        "mild_outliers_pct": 9.6,
+        "extreme_outliers_count": 568,
+        "extreme_outliers_pct": 2.0,
+        "iqr_bounds": [
+          -0.097,
+          0.271
+        ]
+      },
+      "instrumentalness": {
+        "mild_outliers_count": 6085,
+        "mild_outliers_pct": 21.46,
+        "extreme_outliers_count": 5637,
+        "extreme_outliers_pct": 19.88,
+        "iqr_bounds": [
+          -0.0099,
+          0.0164
+        ]
+      },
+      "liveness": {
+        "mild_outliers_count": 1622,
+        "mild_outliers_pct": 5.72,
+        "extreme_outliers_count": 458,
+        "extreme_outliers_pct": 1.62,
+        "iqr_bounds": [
+          -0.142,
+          0.4836
+        ]
+      },
+      "loudness": {
+        "mild_outliers_count": 837,
+        "mild_outliers_pct": 2.95,
+        "extreme_outliers_count": 88,
+        "extreme_outliers_pct": 0.31,
+        "iqr_bounds": [
+          -13.7125,
+          0.6935
+        ]
+      },
+      "tempo": {
+        "mild_outliers_count": 494,
+        "mild_outliers_pct": 1.74,
+        "extreme_outliers_count": 1,
+        "extreme_outliers_pct": 0.0,
+        "iqr_bounds": [
+          48.9315,
+          185.0395
+        ]
+      }
+    },
+    "extreme_cases": {
+      "shortest_track": {
+        "name": "Hi, How're You Doin'?",
+        "artist": "DREAMS COME TRUE",
+        "duration_ms": 4000,
+        "note": "Spoken comedy skit / intro track (4.0s)"
+      },
+      "longest_track": {
+        "name": "47 - Remix",
+        "artist": "Anuel AA",
+        "duration_ms": 517810,
+        "duration_min": 8.6,
+        "note": "Extended DJ set / progressive rock mix (8.6 min)"
+      },
+      "top_speechiness_track": {
+        "name": "I'M DEAD",
+        "artist": "Duckwrth",
+        "speechiness": 0.918,
+        "note": "Spoken word / rap poetry recording"
+      },
+      "top_liveness_track": {
+        "name": "Knockin' On Heaven's Door - Live In London / 1992",
+        "artist": "Guns N' Roses",
+        "liveness": 0.996,
+        "note": "Live stadium performance with heavy audience presence"
+      }
+    },
+    "interpretation": "The dataset contains legitimate domain outliers: 1) Instrumentalness has 21.46% outliers because over 60% of commercial tracks have zero instrumentalness; 2) Speechiness has 9.6% outliers from spoken-word/rap tracks; 3) Track lengths range from a 4s intro skit ('Hi, How're You Doin'?') to an 8.6m track ('47 - Remix'). These represent real acoustic diversity rather than data corruption and should be retained."
+  }
+}
