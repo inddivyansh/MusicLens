@@ -4,6 +4,8 @@
 -- Normalized star-schema for analytics, BI, and recommendation.
 -- Designed for Neon/Supabase free tier and local PostgreSQL.
 -- Dataset: Spotify 30,000 Songs (32,828 cleaned rows, 28,352 unique tracks)
+-- Application tables (users, sessions, user_profiles, spotify_connections)
+-- live in sql/app_schema.sql and MUST NOT be dropped here.
 -- ============================================================
 
 -- ============================================================

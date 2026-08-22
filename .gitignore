@@ -74,6 +74,7 @@ pnpm-debug.log*
 .vscode
 .idea/
 .idea
+.kiro/
 *.swp
 *.swo
 *~
@@ -92,6 +93,8 @@ ehthumbs.db
 *.temp
 dist/
 build/
+build_log.txt
+build_output.txt
 
 # --- Frontend static analytics (keep JSON, drop images) ---
 # data/*.csv is ignored above; these JSON files are the deployed payload.

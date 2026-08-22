@@ -31,7 +31,7 @@ import numpy as np
 from sqlalchemy import text
 
 from pipeline.config import CLEANED_DATA_DIR, SQL_DIR
-from pipeline.utils.db import get_engine, execute_schema, test_connection
+from pipeline.utils.db import get_engine, execute_schema, execute_sql_file, test_connection
 
 
 def load_table(
@@ -85,8 +85,10 @@ def run_pipeline() -> None:
     # ------------------------------------------------------------------
     # 1. Apply schema (idempotent — drops and recreates all objects)
     # ------------------------------------------------------------------
-    print("\n[Step 1] Applying schema...")
+    print("\n[Step 1] Applying catalog schema (music warehouse only)...")
     execute_schema()
+    print("\n[Step 1b] Applying application schema (does not drop users)...")
+    execute_sql_file(SQL_DIR / "app_schema.sql")
 
     engine = get_engine(pooling=False)
     t_start = time.time()
