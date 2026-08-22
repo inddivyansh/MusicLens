@@ -13,20 +13,37 @@
   "explained_variance_threshold": 0.95,
   "random_state": 42,
   "aggregation": {
+    "_comment": "Source weights control the relative influence of each listening source when computing the final profile vector. They are intentionally equal starting points — not performance claims. Tune after offline evaluation (Phase 3).",
+
     "source_weights": {
       "long_term": 1.0,
+      "medium_term": 0.8,
+      "short_term": 0.6,
       "recent": 1.0,
-      "liked": 1.0
+      "liked": 1.2,
+      "manual": 1.2
     },
+
+    "_comment_decay": "Exponential decay: weight = exp(-lambda * age_days). Lambda = 0.08/day → half-life ≈ 8.7 days. Applied to 'recent' and 'liked' sources where timestamps are available. Missing timestamps receive neutral weight 1.0 (not discarded).",
     "temporal_decay_lambda_per_day": 0.08,
+
+    "_comment_liked_decay": "Liked/saved tracks also receive mild temporal decay when added_at is available, using a much slower lambda so long-ago saves still count but very recent saves are weighted slightly higher.",
+    "liked_decay_lambda_per_day": 0.005,
+
+    "_comment_frequency": "interaction_count (replay frequency from recently_played pagination) scales within-source weight. Capped to prevent a single obsessively-replayed track from dominating the profile.",
     "frequency_cap": 10,
-    "source_precedence": [
-      "liked",
-      "recent",
-      "long_term"
-    ],
-    "decay_sources": [
-      "recent"
-    ]
+
+    "_comment_confidence": "Minimum track counts to assign a profile quality status. These thresholds apply to the count of catalog-matched tracks (matched + ambiguous), not raw Spotify tracks.",
+    "confidence_thresholds": {
+      "insufficient": 3,
+      "limited": 15,
+      "established": 40
+    },
+
+    "_comment_precedence": "Cross-source deduplication precedence when building taste signals for the ML path. A catalog track that appears in multiple sources is assigned to exactly one source group using this order.",
+    "source_precedence": ["manual", "liked", "recent", "short_term", "medium_term", "long_term"],
+
+    "_comment_decay_sources": "Which source groups receive temporal decay. 'manual' is excluded because in-app likes have no meaningful recency ordering.",
+    "decay_sources": ["recent", "liked"]
   }
 }

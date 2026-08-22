@@ -113,6 +113,67 @@ CREATE INDEX IF NOT EXISTS idx_user_tracks_user_id        ON user_tracks (user_i
 CREATE INDEX IF NOT EXISTS idx_user_tracks_match_status   ON user_tracks (user_id, match_status);
 CREATE INDEX IF NOT EXISTS idx_user_tracks_catalog_id     ON user_tracks (catalog_track_id);
 
+-- ──────────────────────────────────────────────────────────────────────────
+-- Phase 4 additions to user_tracks
+-- All ALTER TABLE … ADD COLUMN IF NOT EXISTS — safe to re-run on existing DBs.
+-- ──────────────────────────────────────────────────────────────────────────
+
+-- Matching pipeline metadata
+ALTER TABLE user_tracks
+  ADD COLUMN IF NOT EXISTS match_confidence  REAL         DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS matching_method   VARCHAR(24)  DEFAULT NULL;
+
+-- Temporal listening metadata (feeds Phase 1 temporal-decay layer)
+ALTER TABLE user_tracks
+  ADD COLUMN IF NOT EXISTS played_at         TIMESTAMPTZ  DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS added_at          TIMESTAMPTZ  DEFAULT NULL;
+
+-- Play frequency within the ingested batch (recently_played aggregation)
+ALTER TABLE user_tracks
+  ADD COLUMN IF NOT EXISTS interaction_count INTEGER      NOT NULL DEFAULT 1;
+
+-- Widen match_status check to cover the full pipeline vocabulary.
+-- The existing CHECK constraint only permits 'matched'|'unmatched'|'ambiguous';
+-- the new pipeline produces the same three values so no change is needed there.
+
+-- Widen source check to cover 'manual' (in-app likes, already used in profile calc).
+-- Existing constraint: ('top_tracks','recently_played','liked_songs','manual')
+-- No change needed — 'manual' is already present.
+
+-- Comments on new columns
+COMMENT ON COLUMN user_tracks.match_confidence IS
+  'Confidence score 0.0–1.0 from the entity-resolution pipeline. '
+  'NULL for rows created before Phase 4. '
+  '1.0 = exact ID, 0.95 = normalized exact, 0.85 = variant, <0.95 = fuzzy.';
+
+COMMENT ON COLUMN user_tracks.matching_method IS
+  'Pipeline stage that produced the match: '
+  'exact_id | normalized_exact | variant_normalized | fuzzy_trigram | none.';
+
+COMMENT ON COLUMN user_tracks.played_at IS
+  'ISO timestamp of the most-recent play (from recently_played source). '
+  'NULL for top_tracks and liked_songs. '
+  'Fed to the Phase 1 temporal-decay profile layer.';
+
+COMMENT ON COLUMN user_tracks.added_at IS
+  'ISO timestamp when the track was saved to Liked Songs (liked_songs source). '
+  'NULL for other sources.';
+
+COMMENT ON COLUMN user_tracks.interaction_count IS
+  'Number of times this track was observed in the paginated batch for this source. '
+  'Meaningful only for recently_played (>1 = replayed within the fetch window). '
+  'Capped at 10 by the taste-aggregation config frequency_cap.';
+
+-- Index for temporal queries (e.g. recent-plays decay, recap time windows)
+CREATE INDEX IF NOT EXISTS idx_user_tracks_played_at
+  ON user_tracks (user_id, played_at DESC NULLS LAST)
+  WHERE played_at IS NOT NULL;
+
+-- Index for confidence-filtered lookups (e.g. exclude low-confidence matches)
+CREATE INDEX IF NOT EXISTS idx_user_tracks_confidence
+  ON user_tracks (user_id, match_confidence DESC NULLS LAST)
+  WHERE match_confidence IS NOT NULL;
+
 -- user_liked_tracks: in-app manual likes of MusicLens catalog tracks.
 -- Source is always "manual" — not derived from Spotify saved tracks.
 CREATE TABLE IF NOT EXISTS user_liked_tracks (

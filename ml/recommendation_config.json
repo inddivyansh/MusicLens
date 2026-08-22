@@ -1,23 +1,84 @@
 {
+  "_comment": "MusicLens recommendation engine configuration. All weights are documented starting values — not evidence-based tuned values. Tune after running the Phase 3 offline evaluation (ml/evaluation/evaluate.py). Do not adjust based on anecdotal feedback alone.",
+
   "retrieval": {
-    "candidate_limit": 500
+    "_comment": "candidate_limit: how many tracks are scored before MMR reranking. Must be > final limit. Higher = better coverage, slower CPU.",
+    "candidate_limit": 500,
+
+    "_comment_mode": "representation_mode controls which user vector feeds retrieval. 'auto' = use enhanced taste_representation when quality status is 'developing' or 'established'; fall back to preference_vector otherwise. 'enhanced' forces taste_representation. 'baseline' forces preference_vector.",
+    "representation_mode": "auto",
+
+    "_comment_quality": "Minimum profile quality status required to use the enhanced taste_representation path. Statuses in ascending order: insufficient_data < limited < developing < established.",
+    "min_quality_for_enhanced": "developing"
   },
+
   "ranking": {
+    "_comment": "Weights must sum to 1.0. These are starting-point values; adjust after evaluation. audio_similarity and representation_similarity together dominate; genre/artist/popularity/novelty are secondary signals.",
     "weights": {
-      "audio_similarity": 0.8,
-      "genre_affinity": 0.08,
-      "artist_affinity": 0.04,
-      "popularity_prior": 0.02,
-      "novelty": 0.06
+      "audio_similarity":        0.45,
+      "representation_similarity": 0.25,
+      "genre_affinity":          0.10,
+      "artist_affinity":         0.04,
+      "popularity_prior":        0.06,
+      "novelty":                 0.10
+    },
+
+    "_comment_baseline": "Weights used when falling back to baseline_content_recommender mode (no PCA representation available). Only audio_similarity, popularity_prior and novelty are meaningful without a representation space.",
+    "baseline_weights": {
+      "audio_similarity":  0.80,
+      "genre_affinity":    0.08,
+      "artist_affinity":   0.04,
+      "popularity_prior":  0.02,
+      "novelty":           0.06
     }
   },
+
   "diversity": {
-    "mmr_lambda": 0.75,
+    "_comment": "MMR lambda: 1.0 = pure relevance, 0.0 = pure diversity. 0.72 balances discovery with relevance.",
+    "mmr_lambda": 0.72,
+
+    "_comment_artist": "Hard cap: at most this many tracks from the same artist in the final list.",
     "max_per_artist": 2,
+
+    "_comment_genre": "Soft penalty applied per additional track that shares a genre with already-selected tracks. Accumulates linearly.",
     "genre_repeat_penalty": 0.04,
+
     "exclude_seed_artists": false
   },
+
   "novelty": {
+    "_comment": "inverse_log_catalog_popularity: novelty = 1 - log1p(pop*100)/log(101). Tracks with popularity~0 score ~1.0; popularity=100 scores ~0.0.",
     "method": "inverse_log_catalog_popularity"
+  },
+
+  "history_filtering": {
+    "_comment": "Controls which of the user's known tracks are excluded from recommendations.",
+    "exclude_liked_tracks":   true,
+    "exclude_matched_tracks": true,
+    "_comment_matched": "When true, excludes all user_tracks rows with match_status IN ('matched','ambiguous') and confidence >= min_confidence_to_exclude.",
+    "min_confidence_to_exclude": 0.85,
+    "_comment_limit": "Maximum rows loaded from user_tracks for history filtering. Larger = better filtering, more DB read.",
+    "history_limit": 2000
+  },
+
+  "cold_start": {
+    "_comment": "Explicit fallback chain. Each stage is attempted in order; the first that yields a valid vector is used.",
+    "fallback_chain": [
+      "enhanced_taste_representation",
+      "preference_vector",
+      "liked_track_average",
+      "catalog_popularity"
+    ],
+    "_comment_popularity": "When all personalized fallbacks fail, return the top-N catalog tracks by popularity. These are clearly labeled as non-personalized.",
+    "popularity_fallback_limit": 20,
+    "popularity_fallback_min_popularity": 60
+  },
+
+  "explanation": {
+    "_comment": "Controls explanation generation. signal_threshold: minimum signal value to mention a factor in the narrative. All threshold values are in [0, 1] normalized space.",
+    "genre_mention_threshold":  0.15,
+    "artist_mention_threshold": 0.50,
+    "novelty_mention_threshold": 0.65,
+    "top_feature_alignments":   3
   }
 }

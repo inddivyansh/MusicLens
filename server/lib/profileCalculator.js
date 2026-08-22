@@ -164,10 +164,19 @@ function determineArchetype(avgFeatures) {
  *   3. Spotify artist genre mapping + calibrated genre profile
  *   4. Catalog default baseline
  *
- * @param {Array} spotifyTracks
+ * Phase 5: time_range and confidence are preserved on each derived track so
+ * buildTasteRepresentation can apply per-source weights and match-confidence
+ * weighting. Unmatched tracks (falling through to genre profile or default
+ * baseline) receive confidence = 0 and are excluded from the enhanced
+ * aggregation but still contribute to the legacy rawMeans baseline.
+ *
+ * @param {Array} spotifyTracks       — tracks from Spotify ingestion; each may carry
+ *                                      .time_range (short_term|medium_term|long_term),
+ *                                      .confidence (0.0–1.0 from trackMatcher),
+ *                                      .played_at, .added_at, .interaction_count
  * @param {Array} spotifyTopArtists
- * @param {Map} catalogTrackMap
- * @param {Map} catalogArtistMap
+ * @param {Map}   catalogTrackMap     — spotify_track_id → catalog row with audio features
+ * @param {Map}   catalogArtistMap    — norm_artist → artist-average row
  */
 function deriveTrackFeatures(spotifyTracks, spotifyTopArtists = [], catalogTrackMap = new Map(), catalogArtistMap = new Map()) {
   const artistGenreLookup = new Map();
@@ -213,6 +222,8 @@ function deriveTrackFeatures(spotifyTracks, spotifyTopArtists = [], catalogTrack
         tempo: cat.tempo ?? DEFAULT_AUDIO_PROFILE.tempo,
         match_status: 'matched',
         source: t.source || 'top_tracks',
+        time_range: t.time_range || null,           // Phase 5: preserved for source-group routing
+        confidence: t.confidence ?? 1.0,            // Phase 5: exact match = full confidence
         played_at: t.played_at || null,
         added_at: t.added_at || null,
         interaction_count: t.interaction_count || 1,
@@ -241,6 +252,8 @@ function deriveTrackFeatures(spotifyTracks, spotifyTopArtists = [], catalogTrack
         tempo: catArt.tempo ?? DEFAULT_AUDIO_PROFILE.tempo,
         match_status: 'ambiguous',
         source: t.source || 'top_tracks',
+        time_range: t.time_range || null,           // Phase 5
+        confidence: t.confidence ?? 0.75,           // Phase 5: artist match is lower confidence
         played_at: t.played_at || null,
         added_at: t.added_at || null,
         interaction_count: t.interaction_count || 1,
@@ -248,7 +261,8 @@ function deriveTrackFeatures(spotifyTracks, spotifyTopArtists = [], catalogTrack
       continue;
     }
 
-    // 3. Spotify artist genre inferred
+    // 3. Spotify artist genre inferred — features are genre-average, not track-specific.
+    // confidence = 0: excluded from enhanced aggregation, included in legacy means only.
     const inferredGenre = artistGenreLookup.get(normArtist) || classifyGenre(t.genre_name);
     if (inferredGenre && GENRE_AUDIO_PROFILES[inferredGenre]) {
       const prof = GENRE_AUDIO_PROFILES[inferredGenre];
@@ -270,6 +284,8 @@ function deriveTrackFeatures(spotifyTracks, spotifyTopArtists = [], catalogTrack
         tempo: prof.tempo,
         match_status: 'ambiguous',
         source: t.source || 'top_tracks',
+        time_range: t.time_range || null,
+        confidence: 0,                              // Phase 5: genre-average features — not reliable for enhanced aggregation
         played_at: t.played_at || null,
         added_at: t.added_at || null,
         interaction_count: t.interaction_count || 1,
@@ -277,7 +293,7 @@ function deriveTrackFeatures(spotifyTracks, spotifyTopArtists = [], catalogTrack
       continue;
     }
 
-    // 4. Default baseline
+    // 4. Default baseline — not usable for the enhanced aggregation.
     unmatchedCount++;
     derivedTracks.push({
       track_id: sid,
@@ -296,6 +312,8 @@ function deriveTrackFeatures(spotifyTracks, spotifyTopArtists = [], catalogTrack
       tempo: DEFAULT_AUDIO_PROFILE.tempo,
       match_status: 'unmatched',
       source: t.source || 'top_tracks',
+      time_range: t.time_range || null,
+      confidence: 0,                                // Phase 5: default values — excluded from enhanced aggregation
       played_at: t.played_at || null,
       added_at: t.added_at || null,
       interaction_count: t.interaction_count || 1,
@@ -357,10 +375,13 @@ function calculateProfile(
       archetype: archInfo.archetype,
       archetype_tagline: archInfo.tagline,
       archetype_desc: archInfo.description,
+      profile_quality: { status: 'insufficient_data', matched_track_count: 0 },
+      preference_vector_source: 'none',
     };
   }
 
-  // ── 1. Legacy baseline audio means (kept for baseline comparison) ──────
+  // ── 1. Baseline audio means (flat unweighted mean — used for archetype and
+  //       as a fallback preference_vector when enhanced aggregation is unavailable)
   const rawMeans = {};
   for (const feat of RECOMMENDATION_FEATURES) {
     const vals = derivedTracks.map((r) => r[feat]).filter((v) => v != null && !isNaN(v));
@@ -369,31 +390,50 @@ function calculateProfile(
       : DEFAULT_AUDIO_PROFILE[feat] ?? 0.5;
   }
 
-  // ── 2. Audio profile (percentage breakdowns for bounded features) ──────
-  const audioProfile = {
-    energy_pct:           Math.round(rawMeans.energy          * 1000) / 10,
-    danceability_pct:     Math.round(rawMeans.danceability    * 1000) / 10,
-    valence_pct:          Math.round(rawMeans.valence         * 1000) / 10,
-    acousticness_pct:     Math.round(rawMeans.acousticness    * 1000) / 10,
-    instrumentalness_pct: Math.round(rawMeans.instrumentalness * 1000) / 10,
-    speechiness_pct:      Math.round(rawMeans.speechiness     * 1000) / 10,
-    liveness_pct:         Math.round(rawMeans.liveness        * 1000) / 10,
-    avg_tempo_bpm:        Math.round(rawMeans.tempo * 10) / 10,
-    avg_loudness_db:      Math.round(rawMeans.loudness * 100) / 100,
-  };
-
-  // ── 3. Baseline preference vector (for comparison and Friend Blend) ────
-  const preferenceVector = RECOMMENDATION_FEATURES.map((f) => rawMeans[f]);
-
-  // The enhanced representation is source-aware and is consumed by the
-  // recommendation service. Require lazily to avoid a module cycle because
-  // tasteProfile imports the feature-order constant from this module.
+  // ── 2. Enhanced taste representation (Phase 5 source-aware aggregation) ─
+  // Require lazily to avoid a module cycle (tasteProfile imports RECOMMENDATION_FEATURES
+  // from this module).
   // eslint-disable-next-line global-require
   const { buildTasteRepresentation } = require('./tasteProfile');
   const tasteRepresentation = buildTasteRepresentation([
     ...derivedTracks,
     ...(Array.isArray(additionalTasteTracks) ? additionalTasteTracks : []),
   ]);
+
+  // ── 3. Preference vector — use enhanced raw_vector when valid, else rawMeans.
+  //       The recommender.js reads preference_vector for its baseline mode and
+  //       taste_representation.raw_vector for the personalized mode.
+  //       Both must be valid 9-element arrays.
+  const enhancedVector = tasteRepresentation?.raw_vector;
+  const hasEnhancedVector =
+    Array.isArray(enhancedVector) &&
+    enhancedVector.length === RECOMMENDATION_FEATURES.length &&
+    enhancedVector.every((v) => v !== null && Number.isFinite(v));
+
+  const preferenceVector = hasEnhancedVector
+    ? enhancedVector
+    : RECOMMENDATION_FEATURES.map((f) => rawMeans[f]);
+
+  // ── 4. Audio profile percentage breakdowns.
+  //       Derived from the enhanced preference_vector so the displayed feature
+  //       percentages reflect the weighted aggregation, not just a flat mean.
+  //       Bounded features are expressed as 0–100 %; unbounded features (loudness,
+  //       tempo) use their natural scales.
+  const profileSource = hasEnhancedVector
+    ? Object.fromEntries(RECOMMENDATION_FEATURES.map((f, i) => [f, enhancedVector[i]]))
+    : rawMeans;
+
+  const audioProfile = {
+    energy_pct:           Math.round((profileSource.energy           ?? rawMeans.energy)          * 1000) / 10,
+    danceability_pct:     Math.round((profileSource.danceability     ?? rawMeans.danceability)    * 1000) / 10,
+    valence_pct:          Math.round((profileSource.valence          ?? rawMeans.valence)         * 1000) / 10,
+    acousticness_pct:     Math.round((profileSource.acousticness     ?? rawMeans.acousticness)    * 1000) / 10,
+    instrumentalness_pct: Math.round((profileSource.instrumentalness ?? rawMeans.instrumentalness) * 1000) / 10,
+    speechiness_pct:      Math.round((profileSource.speechiness      ?? rawMeans.speechiness)     * 1000) / 10,
+    liveness_pct:         Math.round((profileSource.liveness         ?? rawMeans.liveness)        * 1000) / 10,
+    avg_tempo_bpm:        Math.round((profileSource.tempo            ?? rawMeans.tempo) * 10) / 10,
+    avg_loudness_db:      Math.round((profileSource.loudness         ?? rawMeans.loudness) * 100) / 100,
+  };
 
   // ── 4. Dominant genres ────────────────────────────────────────────────
   const genreCounts = {};
@@ -498,6 +538,10 @@ function calculateProfile(
     archetype: archetypeInfo.archetype,
     archetype_tagline: archetypeInfo.tagline,
     archetype_desc: archetypeInfo.description,
+    // Phase 5: surfaced at the top level for API consumers and the response body.
+    // Consumers that only need preference_vector or taste_representation are unaffected.
+    profile_quality: tasteRepresentation?.quality ?? null,
+    preference_vector_source: hasEnhancedVector ? 'enhanced_weighted' : 'baseline_mean',
   };
 }
 
