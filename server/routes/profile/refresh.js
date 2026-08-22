@@ -116,15 +116,24 @@ module.exports = async function refreshProfile(req, res) {
   }
 
   const tSpotify = Date.now() - tSpotifyStart;
-  const { topTracks, recentTracks, likedSongs, topArtists, ingestionStats } = spotifyResult;
+  const {
+    topTracks = [],
+    recentTracks = [],
+    likedSongs = [],
+    topArtists = [],
+    tracks = [],
+    ingestionStats = { total_raw: 0 },
+  } = spotifyResult || {};
 
   console.log(
     `[profile/refresh] Spotify fetch: ${tSpotify}ms | ` +
     `top=${topTracks.length} recent=${recentTracks.length} liked=${likedSongs.length}`
   );
 
+  const totalRawCount = ingestionStats.total_raw ?? (topTracks.length + recentTracks.length + likedSongs.length + tracks.length);
+
   // Early exit: no data at all
-  if (ingestionStats.total_raw === 0) {
+  if (totalRawCount === 0) {
     return sendJson(res, 200, {
       hasProfile: false,
       message: 'No Spotify listening data found. Try listening to more music and refreshing.',
@@ -143,11 +152,13 @@ module.exports = async function refreshProfile(req, res) {
   // Phase 5: time_range is preserved on top_tracks entries so tasteProfile.js
   // can route short_term / medium_term / long_term into separate weight buckets.
 
-  const allSourcedTracks = [
-    ...topTracks.map((t) => ({ ...t, source: 'top_tracks' })),
-    ...recentTracks.map((t) => ({ ...t, source: 'recently_played' })),
-    ...likedSongs.map((t) => ({ ...t, source: 'liked_songs' })),
-  ];
+  const allSourcedTracks = (topTracks.length || recentTracks.length || likedSongs.length)
+    ? [
+        ...topTracks.map((t) => ({ ...t, source: 'top_tracks' })),
+        ...recentTracks.map((t) => ({ ...t, source: 'recently_played' })),
+        ...likedSongs.map((t) => ({ ...t, source: 'liked_songs' })),
+      ]
+    : tracks.map((t) => ({ ...t, source: t.source || 'top_tracks' }));
 
   // ── 5. Entity resolution (4-stage pipeline) ───────────────────────────
   const tMatchStart = Date.now();

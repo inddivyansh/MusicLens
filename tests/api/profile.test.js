@@ -195,9 +195,64 @@ describe('POST /api/profile/refresh', () => {
 
   test('200 — successful profile refresh with full ML taste profile', async () => {
     stubValidSession();
-    mockSql.mockResolvedValueOnce([{ user_id: USER_ID }]); // spotify connection exists
+
+    mockSql.mockImplementation((strings) => {
+      const q = (Array.isArray(strings) ? strings.join(' ') : String(strings)).toLowerCase();
+      if (q.includes('from spotify_connections')) {
+        return Promise.resolve([{ user_id: USER_ID }]);
+      }
+      if (q.includes('from track_id_mappings')) {
+        return Promise.resolve([{ track_id: 'sp_1', spotify_track_id: 'sp_1' }]);
+      }
+      if (q.includes('from track_feature_vectors')) {
+        return Promise.resolve([
+          {
+            track_id: 'sp_1',
+            track_name: 'Summer Vibes',
+            artist_name: 'Calvin Harris',
+            genre_name: 'edm',
+            danceability: 0.78,
+            energy: 0.85,
+            loudness: -4.5,
+            speechiness: 0.06,
+            acousticness: 0.05,
+            instrumentalness: 0.12,
+            liveness: 0.18,
+            valence: 0.72,
+            tempo: 128.0,
+          },
+        ]);
+      }
+      if (q.includes('from artist_stats')) {
+        return Promise.resolve([
+          {
+            artist_name: 'drake',
+            genre_name: 'rap',
+            danceability: 0.75,
+            energy: 0.62,
+            valence: 0.48,
+          },
+        ]);
+      }
+      if (q.includes('from user_liked_tracks')) {
+        return Promise.resolve([]);
+      }
+      if (q.includes('insert into user_profile_data')) {
+        return Promise.resolve([{ user_id: USER_ID }]);
+      }
+      return Promise.resolve([]);
+    });
 
     fetchAllUserMusic.mockResolvedValueOnce({
+      topTracks: [
+        { spotify_track_id: 'sp_1', track_name: 'Summer Vibes', artist_name: 'Calvin Harris', source: 'top_tracks' },
+      ],
+      recentTracks: [
+        { spotify_track_id: 'sp_2', track_name: 'One Dance', artist_name: 'Drake', source: 'recently_played' },
+      ],
+      likedSongs: [
+        { spotify_track_id: 'sp_3', track_name: 'Blinding Lights', artist_name: 'The Weeknd', source: 'liked_songs' },
+      ],
       tracks: [
         { spotify_track_id: 'sp_1', track_name: 'Summer Vibes', artist_name: 'Calvin Harris', source: 'top_tracks' },
         { spotify_track_id: 'sp_2', track_name: 'One Dance', artist_name: 'Drake', source: 'recently_played' },
@@ -207,42 +262,14 @@ describe('POST /api/profile/refresh', () => {
         { spotify_artist_id: 'art_1', artist_name: 'Drake', genres: ['canadian hip hop', 'rap', 'pop rap'], popularity: 95 },
         { spotify_artist_id: 'art_2', artist_name: 'Calvin Harris', genres: ['edm', 'dance pop', 'electro house'], popularity: 88 },
       ],
+      ingestionStats: {
+        top_tracks_count: 1,
+        recently_played_count: 1,
+        liked_songs_count: 1,
+        total_raw: 3,
+        unique_spotify_ids: 3,
+      },
     });
-
-    // Mock catalog track lookup (track_feature_vectors)
-    mockSql.mockResolvedValueOnce([
-      {
-        track_id: 'sp_1',
-        track_name: 'Summer Vibes',
-        artist_name: 'Calvin Harris',
-        genre_name: 'edm',
-        danceability: 0.78,
-        energy: 0.85,
-        loudness: -4.5,
-        speechiness: 0.06,
-        acousticness: 0.05,
-        instrumentalness: 0.12,
-        liveness: 0.18,
-        valence: 0.72,
-        tempo: 128.0,
-      },
-    ]);
-
-    // Mock artist_stats lookup for unmatched artists
-    mockSql.mockResolvedValueOnce([
-      {
-        artist_name: 'drake',
-        genre_name: 'rap',
-        danceability: 0.75,
-        energy: 0.62,
-        valence: 0.48,
-      },
-    ]);
-
-    // Mock user_profile_data upsert
-    mockSql.mockResolvedValueOnce([{ user_id: USER_ID }]);
-    // Mock user_tracks batch insert
-    mockSql.mockResolvedValue([]);
 
     const req = makeReq('POST');
     const res = makeRes();
