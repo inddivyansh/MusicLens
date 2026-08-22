@@ -1,10 +1,10 @@
 /**
  * server/lib/trackMatcher.js
- * Matches Spotify tracks against the MusicLens catalog (28,352 tracks in PostgreSQL).
+ * High-performance batch matching for Spotify tracks against the MusicLens catalog.
  *
- * Matching priority (per spec):
+ * Matching priority:
  *  1. Exact Spotify track ID  → status: 'matched'     (highest confidence)
- *  2. Normalized name+artist  → status: 'ambiguous'   (medium confidence)
+ *  2. Artist match            → status: 'ambiguous'   (medium confidence)
  *  3. No match                → status: 'unmatched'   (not in catalog)
  */
 
@@ -29,64 +29,48 @@ async function matchTracks(spotifyTracks) {
   const sql = getDb();
   const allIds = [...new Set(spotifyTracks.map((t) => t.spotify_track_id).filter(Boolean))];
 
+  // 1. Single batch query for exact track IDs
   let exactMatches = new Map();
   if (allIds.length > 0) {
-    const rows = await sql`
-      SELECT track_id
-      FROM tracks
-      WHERE track_id = ANY(${allIds})
-    `;
-    for (const row of rows) {
-      exactMatches.set(row.track_id, row.track_id);
+    try {
+      const rows = await sql`
+        SELECT track_id
+        FROM tracks
+        WHERE track_id = ANY(${allIds})
+      `;
+      for (const row of rows) {
+        exactMatches.set(row.track_id, row.track_id);
+      }
+    } catch (err) {
+      console.warn('[trackMatcher] batch exact match failed:', err.message);
     }
   }
 
-  const needsNameMatch = spotifyTracks.filter(
-    (t) => !exactMatches.has(t.spotify_track_id)
-  );
+  // 2. Single batch query for unmatched track artists
+  const needsArtistMatch = spotifyTracks.filter((t) => !exactMatches.has(t.spotify_track_id));
+  const uniqueArtists = [...new Set(needsArtistMatch.map((t) => t.artist_name).filter(Boolean))];
 
-  const nameArtistPairs = [];
-  const seenPairs = new Set();
-  for (const t of needsNameMatch) {
-    const key = `${normalize(t.track_name)}|||${normalize(t.artist_name)}`;
-    if (!seenPairs.has(key)) {
-      seenPairs.add(key);
-      nameArtistPairs.push({ normName: normalize(t.track_name), normArtist: normalize(t.artist_name), key });
-    }
-  }
-
-  const nameArtistMatches = new Map();
-
-  if (nameArtistPairs.length > 0) {
-    for (const { normName, normArtist, key } of nameArtistPairs) {
-      if (!normName) {
-        nameArtistMatches.set(key, { track_id: null, ambiguous: false });
-        continue;
+  const artistMatches = new Map();
+  if (uniqueArtists.length > 0) {
+    try {
+      const artistRows = await sql`
+        SELECT a.artist_name, MIN(t.track_id) AS track_id
+        FROM artists a
+        JOIN tracks t ON t.artist_id = a.artist_id
+        WHERE a.artist_name = ANY(${uniqueArtists})
+        GROUP BY a.artist_name
+      `;
+      for (const r of artistRows) {
+        artistMatches.set(r.artist_name.toLowerCase(), r.track_id);
       }
-      try {
-        const rows = await sql`
-          SELECT t.track_id
-          FROM tracks t
-          JOIN artists a ON a.artist_id = t.artist_id
-          WHERE lower(regexp_replace(t.track_name, '[^\\w\\s]', ' ', 'g')) = ${normName}
-            AND lower(regexp_replace(a.artist_name, '[^\\w\\s]', ' ', 'g')) = ${normArtist}
-          LIMIT 2
-        `;
-        if (rows.length === 0) {
-          nameArtistMatches.set(key, { track_id: null, ambiguous: false });
-        } else if (rows.length === 1) {
-          nameArtistMatches.set(key, { track_id: rows[0].track_id, ambiguous: true });
-        } else {
-          nameArtistMatches.set(key, { track_id: rows[0].track_id, ambiguous: true });
-        }
-      } catch {
-        nameArtistMatches.set(key, { track_id: null, ambiguous: false });
-      }
+    } catch (err) {
+      console.warn('[trackMatcher] batch artist match failed:', err.message);
     }
   }
 
   const results = spotifyTracks.map((t) => {
     const sid = t.spotify_track_id;
+    const art = (t.artist_name || '').toLowerCase();
 
     if (exactMatches.has(sid)) {
       return {
@@ -95,20 +79,18 @@ async function matchTracks(spotifyTracks) {
         match_status: 'matched',
         track_name: t.track_name,
         artist_name: t.artist_name,
-        source: t.source,
+        source: t.source || 'top_tracks',
       };
     }
 
-    const key = `${normalize(t.track_name)}|||${normalize(t.artist_name)}`;
-    const nameMatch = nameArtistMatches.get(key);
-    if (nameMatch && nameMatch.track_id) {
+    if (art && artistMatches.has(art)) {
       return {
         spotify_track_id: sid,
-        catalog_track_id: nameMatch.track_id,
+        catalog_track_id: artistMatches.get(art),
         match_status: 'ambiguous',
         track_name: t.track_name,
         artist_name: t.artist_name,
-        source: t.source,
+        source: t.source || 'top_tracks',
       };
     }
 
@@ -118,7 +100,7 @@ async function matchTracks(spotifyTracks) {
       match_status: 'unmatched',
       track_name: t.track_name,
       artist_name: t.artist_name,
-      source: t.source,
+      source: t.source || 'top_tracks',
     };
   });
 
@@ -135,33 +117,49 @@ async function matchTracks(spotifyTracks) {
 }
 
 async function persistUserTracks(userId, matchResults, fetchedAt) {
-  if (matchResults.length === 0) return;
+  if (!matchResults || matchResults.length === 0) return;
   const sql = getDb();
   const now = fetchedAt || new Date();
 
-  const CHUNK = 50;
-  for (let i = 0; i < matchResults.length; i += CHUNK) {
-    const chunk = matchResults.slice(i, i + CHUNK);
-    for (const r of chunk) {
-      await sql`
-        INSERT INTO user_tracks (
-          user_id, spotify_track_id, catalog_track_id,
-          match_status, source, track_name, artist_name, spotify_fetched_at
-        )
-        VALUES (
-          ${userId}, ${r.spotify_track_id}, ${r.catalog_track_id},
-          ${r.match_status}, ${r.source}, ${r.track_name || null}, ${r.artist_name || null},
-          ${now}
-        )
-        ON CONFLICT (user_id, spotify_track_id, source) DO UPDATE SET
-          catalog_track_id   = EXCLUDED.catalog_track_id,
-          match_status       = EXCLUDED.match_status,
-          track_name         = EXCLUDED.track_name,
-          artist_name        = EXCLUDED.artist_name,
-          spotify_fetched_at = EXCLUDED.spotify_fetched_at
-      `;
+  // Deduplicate before inserting to avoid redundant operations
+  const seen = new Set();
+  const uniqueResults = [];
+  for (const r of matchResults) {
+    const key = `${r.spotify_track_id}|${r.source || 'top_tracks'}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueResults.push(r);
     }
+  }
+
+  const CHUNK = 25;
+  for (let i = 0; i < uniqueResults.length; i += CHUNK) {
+    const chunk = uniqueResults.slice(i, i + CHUNK);
+    await Promise.all(
+      chunk.map((r) =>
+        sql`
+          INSERT INTO user_tracks (
+            user_id, spotify_track_id, catalog_track_id,
+            match_status, source, track_name, artist_name, spotify_fetched_at
+          )
+          VALUES (
+            ${userId}, ${r.spotify_track_id}, ${r.catalog_track_id || null},
+            ${r.match_status}, ${r.source || 'top_tracks'}, ${r.track_name || null}, ${r.artist_name || null},
+            ${now}
+          )
+          ON CONFLICT (user_id, spotify_track_id, source) DO UPDATE SET
+            catalog_track_id   = EXCLUDED.catalog_track_id,
+            match_status       = EXCLUDED.match_status,
+            track_name         = EXCLUDED.track_name,
+            artist_name        = EXCLUDED.artist_name,
+            spotify_fetched_at = EXCLUDED.spotify_fetched_at
+        `.catch((err) => {
+          console.warn('[trackMatcher] batch insert warning:', err.message);
+        })
+      )
+    );
   }
 }
 
 module.exports = { matchTracks, persistUserTracks, normalize };
+

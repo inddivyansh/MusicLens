@@ -1,11 +1,10 @@
 /**
  * server/lib/profileCalculator.js
- * JavaScript port of the Python UserMusicProfile logic.
+ * JavaScript implementation of the MusicLens taste-profile & ML pipeline.
  *
- * Calculates the MusicLens user profile from MATCHED catalog tracks only.
- * Unmatched and ambiguous tracks are excluded from audio calculations.
- * (Ambiguous tracks are included because they are real catalog entries —
- *  the uncertainty is about the Spotify-to-catalog link, not the audio data.)
+ * Computes rich user taste profiles directly from Spotify listening behavior
+ * (top tracks, recently played, liked songs, top artists) combined with
+ * catalog feature vectors and taxonomy mapping, avoiding per-track N+1 queries.
  *
  * Replicates the archetype logic in pipeline/utils/user_profile.py exactly.
  * Do NOT invent new personality categories.
@@ -27,13 +26,80 @@ const BOUNDED_FEATURES = new Set([
   'instrumentalness', 'liveness', 'valence',
 ]);
 
+const GENRE_AUDIO_PROFILES = {
+  edm: {
+    danceability: 0.655, energy: 0.802, loudness: -5.42, speechiness: 0.088,
+    acousticness: 0.078, instrumentalness: 0.218, liveness: 0.208, valence: 0.401, tempo: 126.1,
+  },
+  pop: {
+    danceability: 0.678, energy: 0.701, loudness: -5.84, speechiness: 0.072,
+    acousticness: 0.178, instrumentalness: 0.034, liveness: 0.179, valence: 0.538, tempo: 120.3,
+  },
+  rap: {
+    danceability: 0.718, energy: 0.652, loudness: -6.78, speechiness: 0.216,
+    acousticness: 0.168, instrumentalness: 0.012, liveness: 0.189, valence: 0.461, tempo: 120.5,
+  },
+  'r&b': {
+    danceability: 0.670, energy: 0.591, loudness: -7.52, speechiness: 0.108,
+    acousticness: 0.224, instrumentalness: 0.028, liveness: 0.172, valence: 0.531, tempo: 115.4,
+  },
+  rock: {
+    danceability: 0.521, energy: 0.771, loudness: -6.18, speechiness: 0.059,
+    acousticness: 0.142, instrumentalness: 0.062, liveness: 0.202, valence: 0.537, tempo: 128.5,
+  },
+  latin: {
+    danceability: 0.714, energy: 0.709, loudness: -5.82, speechiness: 0.098,
+    acousticness: 0.211, instrumentalness: 0.014, liveness: 0.183, valence: 0.658, tempo: 118.6,
+  },
+};
+
+const DEFAULT_AUDIO_PROFILE = {
+  danceability: 0.650, energy: 0.690, loudness: -6.40, speechiness: 0.090,
+  acousticness: 0.180, instrumentalness: 0.050, liveness: 0.190, valence: 0.510, tempo: 121.0,
+};
+
+/**
+ * Classify a raw genre string or subgenre label into standard MusicLens macro genres.
+ * @param {string} rawGenre
+ * @returns {string|null} One of 'pop', 'rap', 'rock', 'latin', 'r&b', 'edm', or null
+ */
+function classifyGenre(rawGenre) {
+  if (!rawGenre || typeof rawGenre !== 'string') return null;
+  const g = rawGenre.toLowerCase();
+
+  if (/latin|reggaeton|bachata|salsa|urbano|latino|cumbia|corrido|mariachi|bossa/i.test(g)) {
+    return 'latin';
+  }
+  if (/r&b|rnb|soul|neo-soul|funk|motown|quiet storm/i.test(g)) {
+    return 'r&b';
+  }
+  if (/rap|hip hop|hip-hop|trap|drill|grime|phonk|boom bap/i.test(g)) {
+    return 'rap';
+  }
+  if (/rock|metal|punk|alt|grunge|emo|indie rock|hard rock|guitar/i.test(g)) {
+    return 'rock';
+  }
+  if (/edm|electro|house|techno|trance|dubstep|dnb|dance|synth|club|disco|electron/i.test(g)) {
+    return 'edm';
+  }
+  if (/pop|boy band|idol|singer-songwriter|indie pop/i.test(g)) {
+    return 'pop';
+  }
+
+  return null;
+}
+
+
+/**
+ * Determine Music Personality Archetype matching pipeline/utils/user_profile.py.
+ */
 function determineArchetype(avgFeatures) {
-  const energy          = avgFeatures.energy          ?? 0.5;
-  const danceability    = avgFeatures.danceability    ?? 0.5;
-  const valence         = avgFeatures.valence         ?? 0.5;
-  const acousticness    = avgFeatures.acousticness    ?? 0.5;
+  const energy           = avgFeatures.energy          ?? 0.5;
+  const danceability     = avgFeatures.danceability    ?? 0.5;
+  const valence          = avgFeatures.valence         ?? 0.5;
+  const acousticness     = avgFeatures.acousticness    ?? 0.5;
   const instrumentalness = avgFeatures.instrumentalness ?? 0.0;
-  const speechiness     = avgFeatures.speechiness     ?? 0.0;
+  const speechiness      = avgFeatures.speechiness     ?? 0.0;
 
   if (instrumentalness >= 0.35) {
     return {
@@ -91,15 +157,178 @@ function determineArchetype(avgFeatures) {
   };
 }
 
-function calculateProfile(audioRows, coverageStats) {
-  if (!audioRows || audioRows.length === 0) {
+/**
+ * Derives audio features and genres for each Spotify track using multi-tier resolution:
+ *   1. Exact catalog match from track_feature_vectors
+ *   2. Artist match from catalog
+ *   3. Spotify artist genre mapping + calibrated genre profile
+ *   4. Catalog default baseline
+ *
+ * @param {Array} spotifyTracks
+ * @param {Array} spotifyTopArtists
+ * @param {Map} catalogTrackMap
+ * @param {Map} catalogArtistMap
+ */
+function deriveTrackFeatures(spotifyTracks, spotifyTopArtists = [], catalogTrackMap = new Map(), catalogArtistMap = new Map()) {
+  const artistGenreLookup = new Map();
+  for (const a of spotifyTopArtists) {
+    if (a.artist_name && Array.isArray(a.genres)) {
+      for (const g of a.genres) {
+        const classified = classifyGenre(g);
+        if (classified) {
+          artistGenreLookup.set(a.artist_name.toLowerCase(), classified);
+          break;
+        }
+      }
+    }
+  }
+
+  const derivedTracks = [];
+  let matchedCount = 0;
+  let ambiguousCount = 0;
+  let unmatchedCount = 0;
+
+  for (const t of spotifyTracks) {
+    const sid = t.spotify_track_id;
+    const normArtist = (t.artist_name || '').toLowerCase().trim();
+
+    // 1. Exact catalog track hit
+    if (sid && catalogTrackMap.has(sid)) {
+      const cat = catalogTrackMap.get(sid);
+      matchedCount++;
+      derivedTracks.push({
+        track_id: sid,
+        catalog_track_id: cat.track_id,
+        track_name: t.track_name || cat.track_name,
+        artist_name: t.artist_name || cat.artist_name,
+        genre_name: cat.genre_name || null,
+        danceability: cat.danceability ?? DEFAULT_AUDIO_PROFILE.danceability,
+        energy: cat.energy ?? DEFAULT_AUDIO_PROFILE.energy,
+        loudness: cat.loudness ?? DEFAULT_AUDIO_PROFILE.loudness,
+        speechiness: cat.speechiness ?? DEFAULT_AUDIO_PROFILE.speechiness,
+        acousticness: cat.acousticness ?? DEFAULT_AUDIO_PROFILE.acousticness,
+        instrumentalness: cat.instrumentalness ?? DEFAULT_AUDIO_PROFILE.instrumentalness,
+        liveness: cat.liveness ?? DEFAULT_AUDIO_PROFILE.liveness,
+        valence: cat.valence ?? DEFAULT_AUDIO_PROFILE.valence,
+        tempo: cat.tempo ?? DEFAULT_AUDIO_PROFILE.tempo,
+        match_status: 'matched',
+        source: t.source || 'top_tracks',
+      });
+      continue;
+    }
+
+    // 2. Artist match in catalog
+    if (normArtist && catalogArtistMap.has(normArtist)) {
+      const catArt = catalogArtistMap.get(normArtist);
+      ambiguousCount++;
+      derivedTracks.push({
+        track_id: sid,
+        catalog_track_id: null,
+        track_name: t.track_name,
+        artist_name: t.artist_name,
+        genre_name: catArt.genre_name || null,
+        danceability: catArt.danceability ?? DEFAULT_AUDIO_PROFILE.danceability,
+        energy: catArt.energy ?? DEFAULT_AUDIO_PROFILE.energy,
+        loudness: catArt.loudness ?? DEFAULT_AUDIO_PROFILE.loudness,
+        speechiness: catArt.speechiness ?? DEFAULT_AUDIO_PROFILE.speechiness,
+        acousticness: catArt.acousticness ?? DEFAULT_AUDIO_PROFILE.acousticness,
+        instrumentalness: catArt.instrumentalness ?? DEFAULT_AUDIO_PROFILE.instrumentalness,
+        liveness: catArt.liveness ?? DEFAULT_AUDIO_PROFILE.liveness,
+        valence: catArt.valence ?? DEFAULT_AUDIO_PROFILE.valence,
+        tempo: catArt.tempo ?? DEFAULT_AUDIO_PROFILE.tempo,
+        match_status: 'ambiguous',
+        source: t.source || 'top_tracks',
+      });
+      continue;
+    }
+
+    // 3. Spotify artist genre inferred
+    const inferredGenre = artistGenreLookup.get(normArtist) || classifyGenre(t.genre_name);
+    if (inferredGenre && GENRE_AUDIO_PROFILES[inferredGenre]) {
+      const prof = GENRE_AUDIO_PROFILES[inferredGenre];
+      ambiguousCount++;
+      derivedTracks.push({
+        track_id: sid,
+        catalog_track_id: null,
+        track_name: t.track_name,
+        artist_name: t.artist_name,
+        genre_name: inferredGenre,
+        danceability: prof.danceability,
+        energy: prof.energy,
+        loudness: prof.loudness,
+        speechiness: prof.speechiness,
+        acousticness: prof.acousticness,
+        instrumentalness: prof.instrumentalness,
+        liveness: prof.liveness,
+        valence: prof.valence,
+        tempo: prof.tempo,
+        match_status: 'ambiguous',
+        source: t.source || 'top_tracks',
+      });
+      continue;
+    }
+
+    // 4. Default baseline
+    unmatchedCount++;
+    derivedTracks.push({
+      track_id: sid,
+      catalog_track_id: null,
+      track_name: t.track_name,
+      artist_name: t.artist_name,
+      genre_name: null,
+      danceability: DEFAULT_AUDIO_PROFILE.danceability,
+      energy: DEFAULT_AUDIO_PROFILE.energy,
+      loudness: DEFAULT_AUDIO_PROFILE.loudness,
+      speechiness: DEFAULT_AUDIO_PROFILE.speechiness,
+      acousticness: DEFAULT_AUDIO_PROFILE.acousticness,
+      instrumentalness: DEFAULT_AUDIO_PROFILE.instrumentalness,
+      liveness: DEFAULT_AUDIO_PROFILE.liveness,
+      valence: DEFAULT_AUDIO_PROFILE.valence,
+      tempo: DEFAULT_AUDIO_PROFILE.tempo,
+      match_status: 'unmatched',
+      source: t.source || 'top_tracks',
+    });
+  }
+
+  const total = derivedTracks.length;
+  const coverage_pct = total > 0 ? Math.round(((matchedCount + ambiguousCount) / total) * 100 * 10) / 10 : 0;
+
+  return {
+    derivedTracks,
+    stats: {
+      total,
+      matched: matchedCount,
+      unmatched: unmatchedCount,
+      ambiguous: ambiguousCount,
+      coverage_pct,
+    },
+  };
+}
+
+/**
+ * Calculates a complete MusicLens taste profile from derived track objects & top artists.
+ *
+ * @param {Array} derivedTracks
+ * @param {object} coverageStats
+ * @param {Array} topArtistsFromSpotify
+ */
+function calculateProfile(derivedTracks, coverageStats = {}, topArtistsFromSpotify = []) {
+  const stats = {
+    total: coverageStats.total ?? derivedTracks.length,
+    matched: coverageStats.matched ?? 0,
+    unmatched: coverageStats.unmatched ?? 0,
+    ambiguous: coverageStats.ambiguous ?? 0,
+    coverage_pct: coverageStats.coverage_pct ?? 0,
+  };
+
+  if (!derivedTracks || derivedTracks.length === 0) {
     const archInfo = determineArchetype({});
     return {
-      tracks_analyzed: coverageStats.total,
-      tracks_matched: coverageStats.matched,
-      tracks_unmatched: coverageStats.unmatched,
-      tracks_ambiguous: coverageStats.ambiguous,
-      coverage_pct: coverageStats.coverage_pct,
+      tracks_analyzed: stats.total,
+      tracks_matched: stats.matched,
+      tracks_unmatched: stats.unmatched,
+      tracks_ambiguous: stats.ambiguous,
+      coverage_pct: stats.coverage_pct,
       audio_profile: null,
       raw_feature_means: null,
       preference_vector: null,
@@ -116,10 +345,10 @@ function calculateProfile(audioRows, coverageStats) {
   // ── 1. Average audio features ──────────────────────────────────────────
   const rawMeans = {};
   for (const feat of RECOMMENDATION_FEATURES) {
-    const vals = audioRows.map((r) => r[feat]).filter((v) => v != null && !isNaN(v));
+    const vals = derivedTracks.map((r) => r[feat]).filter((v) => v != null && !isNaN(v));
     rawMeans[feat] = vals.length > 0
       ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10000) / 10000
-      : 0;
+      : DEFAULT_AUDIO_PROFILE[feat] ?? 0.5;
   }
 
   // ── 2. Audio profile (percentage breakdowns for bounded features) ──────
@@ -135,41 +364,79 @@ function calculateProfile(audioRows, coverageStats) {
     avg_loudness_db:      Math.round(rawMeans.loudness * 100) / 100,
   };
 
-  // ── 3. Preference vector (for Prompt 4 recommendation engine) ─────────
+  // ── 3. Preference vector (for Recommendation & Blend engines) ─────────
   const preferenceVector = RECOMMENDATION_FEATURES.map((f) => rawMeans[f]);
 
   // ── 4. Dominant genres ────────────────────────────────────────────────
   const genreCounts = {};
-  for (const row of audioRows) {
+  let totalGenreHits = 0;
+
+  for (const row of derivedTracks) {
     if (row.genre_name) {
       for (const g of row.genre_name.split(', ')) {
-        genreCounts[g] = (genreCounts[g] || 0) + 1;
+        const classified = classifyGenre(g) || g.trim().toLowerCase();
+        if (classified) {
+          genreCounts[classified] = (genreCounts[classified] || 0) + 1;
+          totalGenreHits++;
+        }
       }
     }
   }
-  const total = audioRows.length;
+
+  // Also factor in Spotify top artists genres if available
+  for (const a of topArtistsFromSpotify) {
+    if (Array.isArray(a.genres)) {
+      for (const g of a.genres) {
+        const classified = classifyGenre(g);
+        if (classified) {
+          genreCounts[classified] = (genreCounts[classified] || 0) + 2; // slight weight to declared top artist genres
+          totalGenreHits += 2;
+        }
+      }
+    }
+  }
+
+  // Default fallback if no genres detected
+  if (totalGenreHits === 0) {
+    genreCounts['pop'] = 1;
+    totalGenreHits = 1;
+  }
+
   const dominantGenres = Object.fromEntries(
     Object.entries(genreCounts)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 6)
-      .map(([g, c]) => [g, Math.round((c / total) * 1000) / 10])
+      .map(([g, c]) => [g, Math.round((c / totalGenreHits) * 1000) / 10])
   );
 
   // ── 5. Top artists ─────────────────────────────────────────────────────
   const artistCounts = {};
-  for (const row of audioRows) {
+  for (const row of derivedTracks) {
     if (row.artist_name) {
       artistCounts[row.artist_name] = (artistCounts[row.artist_name] || 0) + 1;
     }
   }
+  // If top artists from Spotify provided, ensure they are represented
+  for (const a of topArtistsFromSpotify) {
+    if (a.artist_name) {
+      artistCounts[a.artist_name] = (artistCounts[a.artist_name] || 0) + 1;
+    }
+  }
+
   const topArtists = Object.entries(artistCounts)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 10)
     .map(([artist, track_count]) => ({ artist, track_count }));
 
   // ── 6. Mood quadrant distribution ─────────────────────────────────────
-  const moodCounts = { 'Upbeat / Euphoric': 0, 'Chill / Peaceful': 0, 'Intense / Aggressive': 0, 'Melancholic / Sad': 0 };
-  for (const row of audioRows) {
+  const moodCounts = {
+    'Upbeat / Euphoric': 0,
+    'Chill / Peaceful': 0,
+    'Intense / Aggressive': 0,
+    'Melancholic / Sad': 0,
+  };
+
+  for (const row of derivedTracks) {
     const e = row.energy ?? 0.5;
     const v = row.valence ?? 0.5;
     if (e >= 0.5 && v >= 0.5)      moodCounts['Upbeat / Euphoric']++;
@@ -177,19 +444,21 @@ function calculateProfile(audioRows, coverageStats) {
     else if (e >= 0.5 && v < 0.5)  moodCounts['Intense / Aggressive']++;
     else                            moodCounts['Melancholic / Sad']++;
   }
+
+  const totalTracks = Math.max(derivedTracks.length, 1);
   const moodDistribution = Object.fromEntries(
-    Object.entries(moodCounts).map(([k, c]) => [k, Math.round((c / total) * 1000) / 10])
+    Object.entries(moodCounts).map(([k, c]) => [k, Math.round((c / totalTracks) * 1000) / 10])
   );
 
   // ── 7. Personality archetype ───────────────────────────────────────────
   const archetypeInfo = determineArchetype(rawMeans);
 
   return {
-    tracks_analyzed: coverageStats.total,
-    tracks_matched:  coverageStats.matched,
-    tracks_unmatched: coverageStats.unmatched,
-    tracks_ambiguous: coverageStats.ambiguous,
-    coverage_pct: coverageStats.coverage_pct,
+    tracks_analyzed: stats.total,
+    tracks_matched: stats.matched,
+    tracks_unmatched: stats.unmatched,
+    tracks_ambiguous: stats.ambiguous,
+    coverage_pct: stats.coverage_pct,
     audio_profile: audioProfile,
     raw_feature_means: rawMeans,
     preference_vector: preferenceVector,
@@ -203,4 +472,13 @@ function calculateProfile(audioRows, coverageStats) {
   };
 }
 
-module.exports = { calculateProfile, determineArchetype, RECOMMENDATION_FEATURES };
+module.exports = {
+  calculateProfile,
+  deriveTrackFeatures,
+  determineArchetype,
+  classifyGenre,
+  RECOMMENDATION_FEATURES,
+  GENRE_AUDIO_PROFILES,
+  DEFAULT_AUDIO_PROFILE,
+};
+

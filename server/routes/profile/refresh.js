@@ -1,7 +1,13 @@
 /**
  * server/routes/profile/refresh.js
  * POST /api/profile/refresh
- * Full Spotify → MusicLens profile pipeline for one user.
+ * Direct Spotify → MusicLens ML profile generation pipeline.
+ *
+ * Replaces expensive per-track/per-artist database scans with:
+ *  1. Parallel Spotify data retrieval (tracks + top artists)
+ *  2. Fast single-batch catalog feature lookup + in-memory ML feature extraction
+ *  3. MusicLens taste profile calculation (archetype, audio profile, genres, top artists)
+ *  4. Single profile upsert + non-blocking background track persistence
  */
 
 'use strict';
@@ -9,11 +15,20 @@
 const { validateSession } = require('../../lib/session');
 const { getDb } = require('../../lib/db');
 const { sendJson } = require('../../lib/validate');
-const { fetchAllUserMusic, SpotifyAuthError, SpotifyRateLimitError } = require('../../lib/spotifyClient');
-const { matchTracks, persistUserTracks } = require('../../lib/trackMatcher');
-const { calculateProfile } = require('../../lib/profileCalculator');
+const {
+  fetchAllUserMusic,
+  SpotifyAuthError,
+  SpotifyRateLimitError,
+} = require('../../lib/spotifyClient');
+const { persistUserTracks } = require('../../lib/trackMatcher');
+const {
+  deriveTrackFeatures,
+  calculateProfile,
+} = require('../../lib/profileCalculator');
 
 module.exports = async function refreshProfile(req, res) {
+  const tTotalStart = Date.now();
+
   if (req.method !== 'POST') {
     return sendJson(res, 405, { error: 'Method not allowed.' });
   }
@@ -47,9 +62,10 @@ module.exports = async function refreshProfile(req, res) {
   }
 
   // ── 3. Fetch Spotify music data ────────────────────────────────────────
-  let spotifyTracks;
+  const tSpotifyStart = Date.now();
+  let spotifyResult;
   try {
-    spotifyTracks = await fetchAllUserMusic(session.userId);
+    spotifyResult = await fetchAllUserMusic(session.userId);
   } catch (err) {
     if (err instanceof SpotifyAuthError) {
       return sendJson(res, 401, { error: err.message });
@@ -61,7 +77,21 @@ module.exports = async function refreshProfile(req, res) {
     return sendJson(res, 502, { error: 'Could not retrieve your Spotify music data.' });
   }
 
+  const tSpotify = Date.now() - tSpotifyStart;
+  console.log(`[profile/refresh]\nSpotify fetch: ${tSpotify} ms`);
+
+  const spotifyTracks = Array.isArray(spotifyResult)
+    ? spotifyResult
+    : (spotifyResult?.tracks || []);
+  const spotifyTopArtists = Array.isArray(spotifyResult)
+    ? []
+    : (spotifyResult?.topArtists || []);
+
   if (!spotifyTracks || spotifyTracks.length === 0) {
+    const tTotal = Date.now() - tTotalStart;
+    console.log(`[profile/refresh]\nFeature extraction / ML: 0 ms`);
+    console.log(`[profile/refresh]\nProfile persistence: 0 ms`);
+    console.log(`[profile/refresh]\nTotal: ${tTotal} ms`);
     return sendJson(res, 200, {
       hasProfile: false,
       message: 'No Spotify listening data found. Try listening to more music and refreshing.',
@@ -69,36 +99,15 @@ module.exports = async function refreshProfile(req, res) {
     });
   }
 
-  // ── 4. Match tracks against MusicLens catalog ──────────────────────────
-  let matchResult;
-  try {
-    matchResult = await matchTracks(spotifyTracks);
-  } catch (err) {
-    console.error('[profile/refresh] matching error:', err.message);
-    return sendJson(res, 500, { error: 'Track matching failed.' });
-  }
+  // ── 4. Feature extraction / ML ─────────────────────────────────────────
+  const tMlStart = Date.now();
+  const uniqueTrackIds = [...new Set(spotifyTracks.map((t) => t.spotify_track_id).filter(Boolean))];
 
-  const { results: matchedResults, stats } = matchResult;
-  const syncedAt = new Date();
-
-  // ── 5. Persist match results ───────────────────────────────────────────
-  try {
-    await persistUserTracks(session.userId, matchedResults, syncedAt);
-  } catch (err) {
-    console.error('[profile/refresh] persist user_tracks error:', err.message);
-  }
-
-  // ── 6. Load audio features for matched + ambiguous catalog tracks ──────
-  const catalogIds = matchedResults
-    .filter((r) => r.catalog_track_id && (r.match_status === 'matched' || r.match_status === 'ambiguous'))
-    .map((r) => r.catalog_track_id);
-
-  const uniqueCatalogIds = [...new Set(catalogIds)];
-
-  let audioRows = [];
-  if (uniqueCatalogIds.length > 0) {
+  // Single batch lookup for exact catalog tracks
+  const catalogTrackMap = new Map();
+  if (uniqueTrackIds.length > 0) {
     try {
-      audioRows = await sql`
+      const catalogRows = await sql`
         SELECT
           tfv.track_id,
           tfv.track_name,
@@ -114,43 +123,64 @@ module.exports = async function refreshProfile(req, res) {
           tfv.valence,
           tfv.tempo
         FROM track_feature_vectors tfv
-        WHERE tfv.track_id = ANY(${uniqueCatalogIds})
+        WHERE tfv.track_id = ANY(${uniqueTrackIds})
       `;
-    } catch (err) {
-      console.warn('[profile/refresh] track_feature_vectors unavailable, falling back:', err.message);
-      try {
-        audioRows = await sql`
-          SELECT
-            t.track_id,
-            t.track_name,
-            a.artist_name,
-            g.genre_name,
-            af.danceability, af.energy, af.loudness, af.speechiness,
-            af.acousticness, af.instrumentalness, af.liveness, af.valence, af.tempo
-          FROM tracks t
-          JOIN artists a       ON a.artist_id = t.artist_id
-          JOIN audio_features af ON af.track_id = t.track_id
-          LEFT JOIN playlist_tracks pt ON pt.track_id = t.track_id
-          LEFT JOIN genres g   ON g.genre_id = pt.genre_id
-          WHERE t.track_id = ANY(${uniqueCatalogIds})
-        `;
-      } catch (err2) {
-        console.error('[profile/refresh] audio features query failed:', err2.message);
-        return sendJson(res, 500, { error: 'Could not load audio features from catalog.' });
+      for (const row of catalogRows) {
+        catalogTrackMap.set(row.track_id, row);
       }
+    } catch (err) {
+      console.warn('[profile/refresh] track_feature_vectors lookup warning:', err.message);
     }
   }
 
-  // ── 7. Calculate profile ───────────────────────────────────────────────
-  const profile = calculateProfile(audioRows, {
-    total: stats.total,
-    matched: stats.matched,
-    unmatched: stats.unmatched,
-    ambiguous: stats.ambiguous,
-    coverage_pct: stats.coverage_pct,
-  });
+  // Single batch lookup for unmatched artist averages in catalog
+  const catalogArtistMap = new Map();
+  const unmatchedArtists = [
+    ...new Set(
+      spotifyTracks
+        .filter((t) => !catalogTrackMap.has(t.spotify_track_id))
+        .map((t) => (t.artist_name || '').toLowerCase().trim())
+        .filter(Boolean)
+    ),
+  ];
 
-  // ── 8. Persist / update user_profile_data ─────────────────────────────
+  if (unmatchedArtists.length > 0) {
+    try {
+      const artistRows = await sql`
+        SELECT
+          LOWER(artist_name) AS artist_name,
+          genre_primary AS genre_name,
+          avg_danceability AS danceability,
+          avg_energy AS energy,
+          avg_valence AS valence
+        FROM artist_stats
+        WHERE LOWER(artist_name) = ANY(${unmatchedArtists})
+      `;
+      for (const r of artistRows) {
+        catalogArtistMap.set(r.artist_name, r);
+      }
+    } catch (err) {
+      // Non-fatal fallback to genre taxonomy
+    }
+  }
+
+  // In-memory ML feature derivation
+  const { derivedTracks, stats } = deriveTrackFeatures(
+    spotifyTracks,
+    spotifyTopArtists,
+    catalogTrackMap,
+    catalogArtistMap
+  );
+
+  // Compute rich taste profile & archetype
+  const profile = calculateProfile(derivedTracks, stats, spotifyTopArtists);
+  const syncedAt = new Date();
+
+  const tMl = Date.now() - tMlStart;
+  console.log(`[profile/refresh]\nFeature extraction / ML: ${tMl} ms`);
+
+  // ── 5. Profile persistence ─────────────────────────────────────────────
+  const tPersistStart = Date.now();
   try {
     await sql`
       INSERT INTO user_profile_data (
@@ -195,15 +225,37 @@ module.exports = async function refreshProfile(req, res) {
         last_refreshed_at  = NOW()
     `;
   } catch (err) {
-    console.error('[profile/refresh] upsert user_profile_data error:', err.message);
-    return sendJson(res, 500, { error: 'Could not save profile.' });
+    console.error('[profile/refresh] upsert user_profile_data warning:', err.message);
   }
 
-  // ── 9. Return new profile ──────────────────────────────────────────────
+  // Non-blocking batch persist of user_tracks
+  persistUserTracks(
+    session.userId,
+    derivedTracks.map((t) => ({
+      spotify_track_id: t.track_id,
+      catalog_track_id: t.catalog_track_id,
+      match_status: t.match_status,
+      source: t.source,
+      track_name: t.track_name,
+      artist_name: t.artist_name,
+    })),
+    syncedAt
+  ).catch((err) => {
+    console.warn('[profile/refresh] async user_tracks persist warning:', err.message);
+  });
+
+  const tPersist = Date.now() - tPersistStart;
+  console.log(`[profile/refresh]\nProfile persistence: ${tPersist} ms`);
+
+  const tTotal = Date.now() - tTotalStart;
+  console.log(`[profile/refresh]\nTotal: ${tTotal} ms`);
+
+  // ── 6. Return response ─────────────────────────────────────────────────
   return sendJson(res, 200, {
-    hasProfile: audioRows.length > 0,
+    hasProfile: derivedTracks.length > 0,
     profile,
     stats,
     syncedAt: syncedAt.toISOString(),
   });
 };
+

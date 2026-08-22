@@ -16,7 +16,7 @@
     "node-mocks-http": "1.16.2"
   },
   "scripts": {
-    "test:api": "node --experimental-vm-modules node_modules/.bin/jest --testPathPattern=\"tests/api\" --forceExit --runInBand",
+    "test:api": "node --experimental-vm-modules node_modules/jest/bin/jest.js --testPathPattern=\"tests/api\" --forceExit --runInBand",
     "migrate": "node sql/migrate.js"
   },
   "jest": {

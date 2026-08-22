@@ -228,14 +228,36 @@ async function fetchLikedSongs(userId) {
   }
 }
 
+async function fetchTopArtists(userId) {
+  try {
+    const data = await spotifyGet(userId, '/me/top/artists', { limit: 50, time_range: 'medium_term' });
+    const artists = [];
+    for (const item of (data.items || [])) {
+      artists.push({
+        spotify_artist_id: item.id,
+        artist_name: item.name,
+        genres: item.genres || [],
+        popularity: item.popularity || 0,
+      });
+    }
+    return artists;
+  } catch (err) {
+    if (err instanceof SpotifyAuthError) throw err;
+    console.warn('[spotifyClient] fetchTopArtists failed:', err.message);
+    return [];
+  }
+}
+
 async function fetchAllUserMusic(userId) {
-  const [topTracks, recentTracks, likedSongs] = await Promise.all([
+  const [topTracks, recentTracks, likedSongs, topArtists] = await Promise.all([
     fetchTopTracks(userId),
     fetchRecentlyPlayed(userId),
     fetchLikedSongs(userId),
+    fetchTopArtists(userId),
   ]);
 
-  return [...topTracks, ...recentTracks, ...likedSongs];
+  const tracks = [...topTracks, ...recentTracks, ...likedSongs];
+  return { tracks, topArtists };
 }
 
 class SpotifyAuthError extends Error {
@@ -253,7 +275,9 @@ module.exports = {
   fetchTopTracks,
   fetchRecentlyPlayed,
   fetchLikedSongs,
+  fetchTopArtists,
   SpotifyAuthError,
   SpotifyRateLimitError,
   SpotifyApiError,
 };
+
