@@ -1,30 +1,35 @@
-/**
- * frontend/src/components/BlendTab.jsx
- * Friend Blend — compare music taste between two MusicLens users.
- *
- * States: idle → creating → invited → (friend joins) → result
- *         invite URL → joining → result
- */
-
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Sparkles, Loader2, AlertCircle, RefreshCw, Copy, CheckCircle2,
-  Users, Music2, BarChart2, UserCircle2, Heart, ArrowRight,
-  Link2, Waves, Mic2, TrendingUp, TrendingDown, Info, Zap,
+  Sparkles,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+  Copy,
+  CheckCircle2,
+  Users,
+  Music2,
+  BarChart2,
+  UserCircle2,
+  Heart,
+  ArrowRight,
+  Link2,
+  Waves,
+  Mic2,
+  TrendingDown,
+  Info,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { blendApi, ApiError } from '../utils/apiClient';
+import SectionHeader from './ui/SectionHeader';
+import StatBar from './ui/StatBar';
+import Pill from './ui/Pill';
+import EmptyState from './ui/EmptyState';
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-function fmt(n, dec = 1) { return n != null && !isNaN(n) ? Number(n).toFixed(dec) : '—'; }
-function pctBar(val, color = 'bg-blue-500') {
-  const w = Math.min(100, Math.max(0, val ?? 0));
-  return (
-    <div className="progress-bar-bg flex-1">
-      <div className={`progress-bar-fill ${color}`} style={{ width: `${w}%` }} />
-    </div>
-  );
+function fmt(n, dec = 1) {
+  return n != null && !isNaN(n) ? Number(n).toFixed(dec) : '—';
 }
+
 function timeAgo(iso) {
   if (!iso) return '';
   const d = Date.now() - new Date(iso).getTime();
@@ -36,208 +41,167 @@ function timeAgo(iso) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-const GENRE_COLORS = { pop: 'genre-pop', rap: 'genre-rap', rock: 'genre-rock',
-                       latin: 'genre-latin', 'r&b': 'genre-rnb', edm: 'genre-edm' };
-
 function scoreColor(score) {
-  if (score >= 85) return 'text-emerald-400';
-  if (score >= 70) return 'text-blue-400';
-  if (score >= 50) return 'text-amber-400';
-  return 'text-red-400';
+  if (score >= 85) return 'text-purple-300';
+  if (score >= 70) return 'text-indigo-300';
+  if (score >= 50) return 'text-amber-300';
+  return 'text-rose-300';
 }
-function scoreBg(score) {
-  if (score >= 85) return 'from-emerald-950/40 via-slate-900/60 to-teal-950/40 border-emerald-500/20';
-  if (score >= 70) return 'from-blue-950/40 via-slate-900/60 to-indigo-950/40 border-blue-500/20';
-  if (score >= 50) return 'from-amber-950/40 via-slate-900/60 to-orange-950/40 border-amber-500/20';
-  return 'from-red-950/40 via-slate-900/60 to-rose-950/40 border-red-500/20';
-}
+
 function scoreLabel(score) {
-  if (score >= 90) return 'Soul Mates 🎶';
+  if (score >= 90) return 'Sonic Soulmates 🎶';
   if (score >= 80) return 'Music Twins ✨';
-  if (score >= 70) return 'Great Match 🤝';
-  if (score >= 60) return 'Good Vibes 🎵';
-  if (score >= 50) return 'Interesting Mix 🎧';
-  return 'Opposites Attract 🔀';
+  if (score >= 70) return 'Great Harmony 🤝';
+  if (score >= 60) return 'Good Resonance 🎵';
+  if (score >= 50) return 'Interesting Blend 🎧';
+  return 'Eclectic Opposites 🔀';
 }
 
-// ── Empty / not-logged-in states ──────────────────────────────────────────
-function EmptyNotLoggedIn({ onShowAuth }) {
-  return (
-    <div className="glass-panel p-12 text-center space-y-4 my-8">
-      <UserCircle2 className="w-12 h-12 text-slate-600 mx-auto" />
-      <h3 className="text-lg font-bold text-white">Sign in to Blend</h3>
-      <p className="text-sm text-slate-400 max-w-sm mx-auto">
-        Compare your music taste with a friend. Both users need a MusicLens account.
-      </p>
-      <button type="button" onClick={onShowAuth}
-        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-lg transition-colors">
-        Sign in / Register
-      </button>
-    </div>
-  );
-}
-
-// ── Blend Result Display ──────────────────────────────────────────────────
 function BlendResult({ result, creatorEmail, participantEmail }) {
   const {
-    blendScore, vectorSimilarity, featureCompatibility, genreAnalysis,
-    sharedTraits, biggestDifferences, sharedArtists, sharedRecommendations,
+    blendScore,
+    vectorSimilarity,
+    featureCompatibility,
+    genreAnalysis,
+    sharedTraits,
+    biggestDifferences,
+    sharedArtists,
+    sharedRecommendations,
   } = result;
 
   return (
     <div className="space-y-6">
+      {/* Blend Score Hero */}
+      <div className="glass-panel p-8 sm:p-10 border-purple-500/30 bg-gradient-to-br from-[#1e1533] via-[#140e24] to-[#0b0713] text-center space-y-3 relative overflow-hidden shadow-2xl shadow-purple-950/40">
+        <div className="pointer-events-none absolute -right-16 -top-16 w-64 h-64 rounded-full bg-purple-600/20 blur-3xl" />
+        <div className="pointer-events-none absolute -left-16 -bottom-16 w-64 h-64 rounded-full bg-indigo-600/20 blur-3xl" />
 
-      {/* ── Blend Score Hero ──────────────────────────────────────────── */}
-      <div className={`glass-panel p-8 bg-gradient-to-r ${scoreBg(blendScore)} border text-center space-y-3`}>
-        <div className="flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wider text-violet-400 mb-1">
-          <Sparkles className="w-4 h-4" />
-          Music Taste Blend Score
-        </div>
-        <div className={`text-6xl font-extrabold font-heading ${scoreColor(blendScore)}`}>
-          {fmt(blendScore, 0)}
-        </div>
-        <p className="text-lg font-semibold text-white">{scoreLabel(blendScore)}</p>
-        <p className="text-xs text-slate-400">
-          Vector similarity: {fmt(vectorSimilarity)}% •
-          Genre overlap: {fmt(genreAnalysis.similarity)}%
-        </p>
-        <div className="flex items-center justify-center gap-3 text-xs text-slate-500 pt-2">
-          <span className="px-2.5 py-1 bg-slate-900/80 rounded-lg border border-slate-800">
-            {creatorEmail}
-          </span>
-          <span className="text-slate-600">×</span>
-          <span className="px-2.5 py-1 bg-slate-900/80 rounded-lg border border-slate-800">
-            {participantEmail}
-          </span>
+        <div className="relative z-10 space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-xs font-bold uppercase tracking-wider text-purple-400 mb-1">
+            <Sparkles className="w-3.5 h-3.5" />
+            Compatibility Score
+          </div>
+          <div className={`text-6xl sm:text-7xl font-extrabold font-heading ${scoreColor(blendScore)} tracking-tight`}>
+            {fmt(blendScore, 0)}%
+          </div>
+          <p className="text-xl font-bold text-white font-heading">{scoreLabel(blendScore)}</p>
+          <p className="text-xs text-[#a1a1c2]">
+            Vector match: {fmt(vectorSimilarity)}% • Genre similarity: {fmt(genreAnalysis.similarity)}%
+          </p>
+          <div className="flex items-center justify-center gap-2 text-xs text-[#6b6b8f] pt-2">
+            <span className="px-3 py-1 bg-[#1e1533] border border-white/10 rounded-xl text-white font-medium">
+              {creatorEmail.split('@')[0]}
+            </span>
+            <span>×</span>
+            <span className="px-3 py-1 bg-[#1e1533] border border-white/10 rounded-xl text-white font-medium">
+              {participantEmail.split('@')[0]}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* ── Overview cards ────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-
-        {/* Shared traits */}
-        <div className="glass-panel p-5 space-y-3">
+      {/* Shared Traits & Differences */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="glass-panel p-6 space-y-4">
           <div className="flex items-center gap-2">
             <Heart className="w-4 h-4 text-pink-400" />
-            <h3 className="text-sm font-semibold text-white">You Both Love</h3>
+            <h3 className="text-base font-bold text-white font-heading">You Both Love</h3>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {sharedTraits.map((t) => (
-              <div key={t.feature} className="flex items-center gap-3 text-xs">
-                <span className="text-slate-300 w-32 capitalize flex-shrink-0">{t.feature}</span>
-                {pctBar(t.compatibility, 'bg-pink-500')}
-                <span className="text-slate-400 w-16 text-right font-mono">{fmt(t.compatibility)}%</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                  t.compatibility >= 90 ? 'bg-emerald-950 text-emerald-400'
-                  : t.compatibility >= 75 ? 'bg-blue-950 text-blue-400'
-                  : 'bg-slate-800 text-slate-400'
-                }`}>{t.label}</span>
-              </div>
+              <StatBar
+                key={t.feature}
+                label={t.feature}
+                value={t.compatibility}
+                displayValue={`${fmt(t.compatibility)}%`}
+                colorClass="bg-pink-500"
+                sub={t.label}
+              />
             ))}
           </div>
         </div>
 
-        {/* Biggest differences */}
-        <div className="glass-panel p-5 space-y-3">
+        <div className="glass-panel p-6 space-y-4">
           <div className="flex items-center gap-2">
             <TrendingDown className="w-4 h-4 text-amber-400" />
-            <h3 className="text-sm font-semibold text-white">Biggest Differences</h3>
+            <h3 className="text-base font-bold text-white font-heading">Biggest Contrasts</h3>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {biggestDifferences.map((d) => (
-              <div key={d.feature} className="flex items-center gap-3 text-xs">
-                <span className="text-slate-300 w-32 capitalize flex-shrink-0">{d.feature}</span>
-                {pctBar(d.compatibility, 'bg-amber-500')}
-                <span className="text-slate-400 w-16 text-right font-mono">{fmt(d.compatibility)}%</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                  d.compatibility < 50 ? 'bg-red-950 text-red-400'
-                  : d.compatibility < 70 ? 'bg-amber-950 text-amber-400'
-                  : 'bg-slate-800 text-slate-400'
-                }`}>{d.label}</span>
-              </div>
+              <StatBar
+                key={d.feature}
+                label={d.feature}
+                value={d.compatibility}
+                displayValue={`${fmt(d.compatibility)}%`}
+                colorClass="bg-amber-500"
+                sub={d.label}
+              />
             ))}
           </div>
         </div>
       </div>
 
-      {/* ── Feature Compatibility ──────────────────────────────────────── */}
-      <div className="glass-panel p-5 space-y-4">
+      {/* Detailed Feature Compatibility */}
+      <div className="glass-panel p-6 space-y-4">
         <div className="flex items-center gap-2">
-          <Waves className="w-4 h-4 text-violet-400" />
-          <h3 className="text-sm font-semibold text-white">Feature Compatibility</h3>
+          <Waves className="w-4 h-4 text-purple-400" />
+          <h3 className="text-base font-bold text-white font-heading">Feature Alignment</h3>
         </div>
-        <div className="space-y-2.5">
+        <div className="space-y-3">
           {featureCompatibility.map((f) => (
-            <div key={f.feature} className="flex items-center gap-3 text-xs">
-              <span className="text-slate-300 w-32 capitalize flex-shrink-0">{f.feature}</span>
-              <span className="text-slate-500 w-12 text-right font-mono">{fmt(f.userA, 2)}</span>
-              {pctBar(f.compatibility, f.compatibility >= 80 ? 'bg-emerald-500' : f.compatibility >= 60 ? 'bg-blue-500' : 'bg-amber-500')}
-              <span className="text-slate-500 w-12 text-right font-mono">{fmt(f.userB, 2)}</span>
-              <span className={`font-mono w-14 text-right font-bold ${
-                f.compatibility >= 80 ? 'text-emerald-400' : f.compatibility >= 60 ? 'text-blue-400' : 'text-amber-400'
-              }`}>{fmt(f.compatibility)}%</span>
+            <div key={f.feature} className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-white capitalize">{f.feature}</span>
+                <span className="font-mono font-bold text-purple-300">{fmt(f.compatibility)}%</span>
+              </div>
+              <div className="progress-bar-bg">
+                <div
+                  className="progress-bar-fill bg-purple-500"
+                  style={{ width: `${Math.min(100, f.compatibility)}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] font-mono text-[#6b6b8f]">
+                <span>{creatorEmail.split('@')[0]}: {fmt(f.userA, 2)}</span>
+                <span>{participantEmail.split('@')[0]}: {fmt(f.userB, 2)}</span>
+              </div>
             </div>
           ))}
         </div>
-        <div className="flex justify-between text-[10px] text-slate-600 pt-1 border-t border-slate-800">
-          <span>← {creatorEmail}</span>
-          <span>{participantEmail} →</span>
-        </div>
       </div>
 
-      {/* ── Genre Analysis ─────────────────────────────────────────────── */}
+      {/* Shared Genres */}
       {genreAnalysis.shared.length > 0 && (
-        <div className="glass-panel p-5 space-y-3">
+        <div className="glass-panel p-6 space-y-4">
           <div className="flex items-center gap-2">
             <BarChart2 className="w-4 h-4 text-amber-400" />
-            <h3 className="text-sm font-semibold text-white">Shared Genres</h3>
-            <span className="text-xs text-slate-500">Genre similarity: {fmt(genreAnalysis.similarity)}%</span>
+            <h3 className="text-base font-bold text-white font-heading">Shared Sound Profiles</h3>
           </div>
           <div className="flex flex-wrap gap-2">
             {genreAnalysis.shared.map(({ genre, pctA, pctB }) => (
-              <span key={genre} className={`genre-badge ${GENRE_COLORS[genre?.toLowerCase()] || 'genre-other'}`}>
-                {genre}
-                <span className="opacity-70 ml-1">{fmt(pctA, 0)}% / {fmt(pctB, 0)}%</span>
-              </span>
+              <Pill
+                key={genre}
+                label={`${genre} (${fmt(pctA, 0)}% / ${fmt(pctB, 0)}%)`}
+                genre={genre}
+                size="md"
+              />
             ))}
           </div>
-          {(genreAnalysis.onlyA.length > 0 || genreAnalysis.onlyB.length > 0) && (
-            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800">
-              {genreAnalysis.onlyA.length > 0 && (
-                <div>
-                  <p className="text-[10px] text-slate-500 mb-1">Only {creatorEmail.split('@')[0]}</p>
-                  <div className="flex flex-wrap gap-1">
-                    {genreAnalysis.onlyA.map(({ genre }) => (
-                      <span key={genre} className="text-[10px] px-2 py-0.5 bg-slate-800 text-slate-400 rounded capitalize">{genre}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {genreAnalysis.onlyB.length > 0 && (
-                <div>
-                  <p className="text-[10px] text-slate-500 mb-1">Only {participantEmail.split('@')[0]}</p>
-                  <div className="flex flex-wrap gap-1">
-                    {genreAnalysis.onlyB.map(({ genre }) => (
-                      <span key={genre} className="text-[10px] px-2 py-0.5 bg-slate-800 text-slate-400 rounded capitalize">{genre}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       )}
 
-      {/* ── Shared Artists ──────────────────────────────────────────────── */}
+      {/* Shared Artists */}
       {sharedArtists.length > 0 && (
-        <div className="glass-panel p-5 space-y-3">
+        <div className="glass-panel p-6 space-y-4">
           <div className="flex items-center gap-2">
-            <Mic2 className="w-4 h-4 text-pink-400" />
-            <h3 className="text-sm font-semibold text-white">Artists You Both Listen To</h3>
+            <Mic2 className="w-4 h-4 text-purple-400" />
+            <h3 className="text-base font-bold text-white font-heading">Artists You Both Enjoy</h3>
           </div>
           <div className="flex flex-wrap gap-2">
             {sharedArtists.map((a) => (
-              <span key={a} className="px-3 py-1.5 bg-slate-900/80 border border-slate-800 rounded-lg text-xs text-slate-200 font-medium">
+              <span
+                key={a}
+                className="px-3 py-1.5 bg-[#1e1533] border border-white/10 rounded-xl text-xs text-white font-medium"
+              >
                 {a}
               </span>
             ))}
@@ -245,44 +209,37 @@ function BlendResult({ result, creatorEmail, participantEmail }) {
         </div>
       )}
 
-      {/* ── Shared Recommendations ─────────────────────────────────────── */}
+      {/* Shared Recommendations */}
       {sharedRecommendations.length > 0 && (
-        <div className="glass-panel p-5 space-y-4">
+        <div className="glass-panel p-6 space-y-4">
           <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-sm font-semibold text-white">Recommended for Both of You</h3>
-            <span className="text-xs text-slate-500 ml-1">{sharedRecommendations.length} tracks</span>
+            <Zap className="w-4 h-4 text-purple-400" />
+            <h3 className="text-base font-bold text-white font-heading">Recommended for Both of You</h3>
           </div>
-          <div className="space-y-2.5">
-            {sharedRecommendations.map((rec) => (
-              <div key={rec.track_id} className="p-3.5 bg-slate-900/60 border border-slate-800 hover:border-emerald-500/30 rounded-xl transition-all space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5 truncate">
-                    <span className="text-xs font-mono text-slate-500 w-5">#{rec.rank}</span>
+          <div className="space-y-3">
+            {sharedRecommendations.map((rec) => {
+              const primaryGenre = (rec.genre_name || '').split(', ')[0];
+              return (
+                <div
+                  key={rec.track_id}
+                  className="glass-card-interactive p-4 flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-3 truncate">
+                    <span className="text-xs font-mono font-bold text-[#6b6b8f] w-5">#{rec.rank}</span>
                     <div className="truncate">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-xs text-slate-100">{rec.track_name}</span>
-                        {rec.genre_name && (
-                          <span className={`genre-badge text-[9px] ${GENRE_COLORS[(rec.genre_name.split(', ')[0] || '').toLowerCase()] || 'genre-other'}`}>
-                            {rec.genre_name.split(', ')[0]}
-                          </span>
-                        )}
+                        <span className="font-semibold text-xs text-white truncate">{rec.track_name}</span>
+                        {primaryGenre && <Pill label={primaryGenre} genre={primaryGenre} size="sm" />}
                       </div>
-                      <span className="text-[11px] text-slate-400">by {rec.artist_name}</span>
+                      <span className="text-[11px] text-[#a1a1c2]">by {rec.artist_name}</span>
                     </div>
                   </div>
-                  <span className="font-bold text-sm text-emerald-400 font-mono flex-shrink-0">
-                    {rec.similarity_pct}%
+                  <span className="font-bold text-xs text-purple-300 font-mono shrink-0">
+                    {rec.similarity_pct}% match
                   </span>
                 </div>
-                {rec.explanation?.narrative && (
-                  <div className="text-[11px] text-slate-500 flex items-start gap-1.5">
-                    <Info className="w-3 h-3 flex-shrink-0 mt-0.5 text-blue-400" />
-                    <span>{rec.explanation.narrative}</span>
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -290,60 +247,59 @@ function BlendResult({ result, creatorEmail, participantEmail }) {
   );
 }
 
-// ── Blend card (for list view) ────────────────────────────────────────────
 function BlendCard({ blend, onView }) {
   const statusBadge = {
-    pending:   'bg-amber-950 text-amber-400 border-amber-800',
-    accepted:  'bg-blue-950 text-blue-400 border-blue-800',
-    completed: 'bg-emerald-950 text-emerald-400 border-emerald-800',
-    expired:   'bg-slate-800 text-slate-500 border-slate-700',
+    pending: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
+    accepted: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20',
+    completed: 'bg-purple-500/10 text-purple-300 border-purple-500/20',
+    expired: 'bg-white/5 text-[#6b6b8f] border-white/5',
   };
 
   return (
-    <div className="p-4 bg-slate-900/60 border border-slate-800 hover:border-slate-700 rounded-xl transition-all">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <Users className="w-5 h-5 text-violet-400 flex-shrink-0" />
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-200 truncate">
-              Blend with {blend.partnerEmail || '(waiting for friend)'}
-            </p>
-            <p className="text-[11px] text-slate-500">
-              {blend.role === 'creator' ? 'Created' : 'Joined'} {timeAgo(blend.createdAt)}
-            </p>
-          </div>
+    <div className="glass-card-interactive p-4 flex items-center justify-between gap-3">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
+          <Users className="w-4 h-4" />
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className={`text-[10px] px-2 py-0.5 rounded-md border capitalize ${statusBadge[blend.status] || statusBadge.expired}`}>
-            {blend.status}
-          </span>
-          {(blend.status === 'completed' || blend.status === 'accepted') && (
-            <button type="button" onClick={() => onView(blend.blendId)}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs font-semibold text-white transition-colors">
-              View
-            </button>
-          )}
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-white truncate">
+            Blend with {blend.partnerEmail || '(waiting for friend)'}
+          </p>
+          <p className="text-[10px] text-[#6b6b8f]">
+            {blend.role === 'creator' ? 'Created' : 'Joined'} {timeAgo(blend.createdAt)}
+          </p>
         </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <span className={`text-[10px] px-2 py-0.5 rounded-full border capitalize font-bold ${statusBadge[blend.status] || statusBadge.expired}`}>
+          {blend.status}
+        </span>
+        {(blend.status === 'completed' || blend.status === 'accepted') && (
+          <button
+            type="button"
+            onClick={() => onView(blend.blendId)}
+            className="px-3 py-1 bg-signature-gradient hover:opacity-95 rounded-lg text-xs font-semibold text-white transition-all shadow-sm"
+          >
+            View
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-// ── Main component ─────────────────────────────────────────────────────────
 export default function BlendTab({ onShowAuth, initialInviteToken }) {
   const { user } = useAuth();
 
-  // States
-  const [view, setView]             = useState('list'); // list | invite | join | detail
-  const [blends, setBlends]         = useState([]);
+  const [view, setView] = useState('list');
+  const [blends, setBlends] = useState([]);
   const [blendDetail, setBlendDetail] = useState(null);
   const [inviteData, setInviteData] = useState(null);
   const [inviteToken, setInviteToken] = useState(initialInviteToken || '');
-  const [loading, setLoading]       = useState(false);
-  const [error, setError]           = useState(null);
-  const [copied, setCopied]         = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [copied, setCopied] = useState(false);
 
-  // ── Load blends list ─────────────────────────────────────────────────
   const loadBlends = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -364,7 +320,6 @@ export default function BlendTab({ onShowAuth, initialInviteToken }) {
     if (user && view === 'list') loadBlends();
   }, [user, view, loadBlends]);
 
-  // ── Handle initial invite token from URL ─────────────────────────────
   useEffect(() => {
     if (initialInviteToken && user) {
       setInviteToken(initialInviteToken);
@@ -374,7 +329,6 @@ export default function BlendTab({ onShowAuth, initialInviteToken }) {
     }
   }, [initialInviteToken, user]);
 
-  // ── Create blend ─────────────────────────────────────────────────────
   async function handleCreate() {
     setLoading(true);
     setError(null);
@@ -389,14 +343,12 @@ export default function BlendTab({ onShowAuth, initialInviteToken }) {
     }
   }
 
-  // ── Join blend ───────────────────────────────────────────────────────
   async function handleJoin() {
     if (!inviteToken.trim()) return;
     setLoading(true);
     setError(null);
     try {
       const data = await blendApi.join(inviteToken.trim());
-      // After joining, view the blend
       await handleViewBlend(data.blendId);
     } catch (err) {
       setError(err.message || 'Could not join blend.');
@@ -404,7 +356,6 @@ export default function BlendTab({ onShowAuth, initialInviteToken }) {
     }
   }
 
-  // ── View blend detail ────────────────────────────────────────────────
   async function handleViewBlend(blendId) {
     setLoading(true);
     setError(null);
@@ -419,7 +370,6 @@ export default function BlendTab({ onShowAuth, initialInviteToken }) {
     }
   }
 
-  // ── Copy invite link ─────────────────────────────────────────────────
   function copyInviteLink() {
     if (!inviteData) return;
     const url = `${window.location.origin}${window.location.pathname}?blend=${inviteData.inviteToken}`;
@@ -429,87 +379,85 @@ export default function BlendTab({ onShowAuth, initialInviteToken }) {
     });
   }
 
-  // ── Not logged in ────────────────────────────────────────────────────
   if (!user) {
     return (
-      <div className="space-y-6 mt-4">
-        <EmptyNotLoggedIn onShowAuth={onShowAuth} />
-        {inviteToken && (
-          <div className="glass-panel p-6 text-center space-y-3 border border-violet-500/20">
-            <Link2 className="w-8 h-8 text-violet-400 mx-auto" />
-            <p className="text-sm text-slate-300">
-              You have a blend invitation. Sign in to accept it.
-            </p>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // ── Loading ──────────────────────────────────────────────────────────
-  if (loading && view !== 'detail' && view !== 'list') {
-    return (
-      <div className="flex justify-center py-24">
-        <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
+      <div className="space-y-6">
+        <SectionHeader
+          eyebrow="Social Discovery"
+          title="Blend with a Friend"
+          description="Compare your music taste with a friend. See your compatibility score, shared traits, and recommended tracks."
+        />
+        <EmptyState
+          icon={Users}
+          title="Sign in to Blend"
+          message="Compare your music taste with a friend. Both users need a free MusicLens account to generate a Blend."
+          actionText="Sign in / Register"
+          onAction={onShowAuth}
+        />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 mt-4">
+    <div className="space-y-6">
+      {/* Header */}
+      <SectionHeader
+        eyebrow="Social Discovery"
+        title="Friend Blend"
+        description="Compare your taste profile with friends to discover shared favorites, contrasting traits, and mutual recommendations."
+        badge={
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-purple-500/10 text-purple-300 border border-purple-500/20">
+            Beta
+          </span>
+        }
+      />
 
-      {/* ── Header ──────────────────────────────────────────────────── */}
-      <div className="glass-panel p-6 bg-gradient-to-r from-violet-950/40 via-slate-900/60 to-pink-950/40 border border-violet-500/20">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-violet-400 mb-2">
-          <Users className="w-4 h-4" />
-          Friend Blend
-        </div>
-        <h1 className="text-2xl lg:text-3xl font-extrabold text-white font-heading">
-          Blend with a Friend
-        </h1>
-        <p className="text-sm text-slate-300 max-w-3xl mt-1">
-          Compare your music taste with a friend. See your compatibility score, shared traits,
-          biggest differences, and get track recommendations for both of you.
-        </p>
-      </div>
-
-      {/* ── Error banner ────────────────────────────────────────────── */}
       {error && (
-        <div className="flex items-center gap-3 p-4 bg-red-950/30 border border-red-500/30 rounded-xl text-sm text-red-300">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+        <div className="flex items-center gap-3 p-4 bg-red-950/20 border border-red-500/20 rounded-xl text-xs text-red-300">
+          <AlertCircle className="w-4 h-4 shrink-0" />
           <span className="flex-1">{error}</span>
-          <button type="button" onClick={() => setError(null)} className="text-xs text-red-400 hover:text-red-200">Dismiss</button>
+          <button type="button" onClick={() => setError(null)} className="font-bold text-red-400 hover:underline">
+            Dismiss
+          </button>
         </div>
       )}
 
-      {/* ── VIEW: List ──────────────────────────────────────────────── */}
+      {/* VIEW: List */}
       {view === 'list' && (
-        <div className="space-y-4">
+        <div className="space-y-5">
           <div className="flex flex-col sm:flex-row gap-3">
-            <button type="button" onClick={handleCreate} disabled={loading}
-              className="flex items-center justify-center gap-2 px-5 py-3 bg-violet-600 hover:bg-violet-500 rounded-xl text-sm font-semibold text-white transition-colors disabled:opacity-50 shadow-lg shadow-violet-500/20">
+            <button
+              type="button"
+              onClick={handleCreate}
+              disabled={loading}
+              className="flex items-center justify-center gap-2 px-5 py-3 bg-signature-gradient hover:opacity-95 rounded-xl text-xs font-semibold text-white transition-all shadow-md shadow-purple-600/25 active:scale-95 disabled:opacity-50"
+            >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
-              Create New Blend
+              <span>Create New Blend</span>
             </button>
-            <button type="button" onClick={() => setView('join')}
-              className="flex items-center justify-center gap-2 px-5 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-sm font-semibold text-slate-200 transition-colors">
+            <button
+              type="button"
+              onClick={() => setView('join')}
+              className="flex items-center justify-center gap-2 px-5 py-3 bg-[#1e1533] hover:bg-[#2a1f45] border border-white/10 rounded-xl text-xs font-semibold text-white transition-colors"
+            >
               <Link2 className="w-4 h-4" />
-              Join with Invite
+              <span>Join with Invite</span>
             </button>
           </div>
 
           {loading ? (
             <div className="flex justify-center py-12">
-              <Loader2 className="w-6 h-6 text-slate-500 animate-spin" />
+              <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
             </div>
           ) : blends.length === 0 ? (
-            <div className="glass-panel p-10 text-center space-y-3">
-              <Music2 className="w-10 h-10 text-slate-600 mx-auto" />
-              <p className="text-sm text-slate-400">No blends yet. Create one and share the invite with a friend!</p>
-            </div>
+            <EmptyState
+              icon={Music2}
+              title="No Blends Created Yet"
+              message="Create a Blend and share the invite link with a friend to compare your music tastes!"
+            />
           ) : (
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-slate-300">Your Blends</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#a1a1c2] px-1">Your Blends</h3>
               {blends.map((b) => (
                 <BlendCard key={b.blendId} blend={b} onView={handleViewBlend} />
               ))}
@@ -518,167 +466,150 @@ export default function BlendTab({ onShowAuth, initialInviteToken }) {
         </div>
       )}
 
-      {/* ── VIEW: Invite (after creating) ───────────────────────────── */}
+      {/* VIEW: Invite */}
       {view === 'invite' && inviteData && (
-        <div className="glass-panel p-8 space-y-5 border border-violet-500/20 max-w-lg mx-auto text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-violet-600 to-pink-500 flex items-center justify-center mx-auto shadow-lg shadow-violet-500/30">
-            <Link2 className="w-7 h-7 text-white" />
+        <div className="glass-panel p-8 space-y-5 border-purple-500/20 max-w-lg mx-auto text-center">
+          <div className="w-14 h-14 rounded-2xl bg-signature-gradient flex items-center justify-center mx-auto shadow-lg shadow-purple-600/30 text-white">
+            <Link2 className="w-6 h-6" />
           </div>
-          <h2 className="text-xl font-bold text-white">Blend Created!</h2>
-          <p className="text-sm text-slate-300">Share this link with your friend so they can join the blend.</p>
+          <div className="space-y-1">
+            <h2 className="text-lg font-bold text-white font-heading">Blend Created!</h2>
+            <p className="text-xs text-[#a1a1c2]">Share this link with your friend so they can join the blend.</p>
+          </div>
 
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 flex items-center gap-2">
-            <input type="text" readOnly
+          <div className="bg-[#140e24] border border-white/10 rounded-xl p-2.5 flex items-center gap-2">
+            <input
+              type="text"
+              readOnly
               value={`${window.location.origin}${window.location.pathname}?blend=${inviteData.inviteToken}`}
-              className="flex-1 bg-transparent text-xs text-slate-300 font-mono outline-none min-w-0"
+              className="flex-1 bg-transparent text-xs text-[#a1a1c2] font-mono outline-none min-w-0 px-1"
             />
-            <button type="button" onClick={copyInviteLink}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-500 rounded-lg text-xs font-semibold text-white transition-colors flex-shrink-0">
+            <button
+              type="button"
+              onClick={copyInviteLink}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-signature-gradient hover:opacity-95 rounded-lg text-xs font-semibold text-white transition-all shrink-0"
+            >
               {copied ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              {copied ? 'Copied!' : 'Copy'}
+              <span>{copied ? 'Copied!' : 'Copy'}</span>
             </button>
           </div>
-
-          <p className="text-[11px] text-slate-500">
-            This invite expires {new Date(inviteData.expiresAt).toLocaleDateString()}.
-            Your friend needs a MusicLens account to join.
-          </p>
 
           <div className="flex gap-2 justify-center pt-2">
-            <button type="button" onClick={() => { setView('list'); loadBlends(); }}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-semibold text-slate-300 transition-colors">
+            <button
+              type="button"
+              onClick={() => {
+                setView('list');
+                loadBlends();
+              }}
+              className="px-4 py-2 bg-[#1e1533] hover:bg-[#2a1f45] border border-white/10 rounded-xl text-xs font-semibold text-white transition-colors"
+            >
               ← Back to Blends
             </button>
-            <button type="button" onClick={() => handleViewBlend(inviteData.blendId)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs font-semibold text-white transition-colors">
+            <button
+              type="button"
+              onClick={() => handleViewBlend(inviteData.blendId)}
+              className="px-4 py-2 bg-signature-gradient hover:opacity-95 rounded-xl text-xs font-semibold text-white transition-all"
+            >
               View Blend
             </button>
           </div>
         </div>
       )}
 
-      {/* ── VIEW: Join ──────────────────────────────────────────────── */}
+      {/* VIEW: Join */}
       {view === 'join' && (
-        <div className="glass-panel p-8 space-y-5 border border-violet-500/20 max-w-lg mx-auto text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-violet-500 flex items-center justify-center mx-auto shadow-lg shadow-blue-500/30">
-            <ArrowRight className="w-7 h-7 text-white" />
+        <div className="glass-panel p-8 space-y-5 border-purple-500/20 max-w-lg mx-auto text-center">
+          <div className="w-14 h-14 rounded-2xl bg-signature-gradient flex items-center justify-center mx-auto shadow-lg shadow-purple-600/30 text-white">
+            <ArrowRight className="w-6 h-6" />
           </div>
-          <h2 className="text-xl font-bold text-white">Join a Blend</h2>
-          <p className="text-sm text-slate-300">Paste the invite link or token your friend shared with you.</p>
+          <div className="space-y-1">
+            <h2 className="text-lg font-bold text-white font-heading">Join a Blend</h2>
+            <p className="text-xs text-[#a1a1c2]">Paste the invite link or token your friend shared with you.</p>
+          </div>
 
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 flex items-center gap-2">
-            <input type="text" placeholder="Paste invite link or token..."
+          <div className="bg-[#140e24] border border-white/10 rounded-xl p-2.5">
+            <input
+              type="text"
+              placeholder="Paste invite link or token..."
               value={inviteToken}
               onChange={(e) => {
-                // Extract token from full URL or accept raw token
                 const v = e.target.value.trim();
                 const match = v.match(/[?&]blend=([a-f0-9]{64})/i);
                 setInviteToken(match ? match[1] : v);
               }}
-              className="flex-1 bg-transparent text-xs text-slate-300 font-mono outline-none min-w-0 placeholder-slate-600"
+              className="w-full bg-transparent text-xs text-white font-mono outline-none placeholder-[#6b6b8f]"
             />
           </div>
 
           <div className="flex gap-2 justify-center">
-            <button type="button" onClick={() => { setView('list'); setInviteToken(''); }}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-semibold text-slate-300 transition-colors">
+            <button
+              type="button"
+              onClick={() => {
+                setView('list');
+                setInviteToken('');
+              }}
+              className="px-4 py-2 bg-[#1e1533] hover:bg-[#2a1f45] border border-white/10 rounded-xl text-xs font-semibold text-white transition-colors"
+            >
               ← Back
             </button>
-            <button type="button" onClick={handleJoin} disabled={!inviteToken.trim() || loading}
-              className="flex items-center gap-2 px-5 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-sm font-semibold text-white transition-colors disabled:opacity-50">
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
-              Join Blend
+            <button
+              type="button"
+              onClick={handleJoin}
+              disabled={!inviteToken.trim() || loading}
+              className="flex items-center gap-2 px-5 py-2 bg-signature-gradient hover:opacity-95 rounded-xl text-xs font-semibold text-white transition-all disabled:opacity-50 shadow-md shadow-purple-600/20"
+            >
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
+              <span>Join Blend</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* ── VIEW: Blend detail ──────────────────────────────────────── */}
+      {/* VIEW: Detail */}
       {view === 'detail' && (
         <div className="space-y-4">
-          <button type="button" onClick={() => { setView('list'); setBlendDetail(null); loadBlends(); }}
-            className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 transition-colors">
+          <button
+            type="button"
+            onClick={() => {
+              setView('list');
+              setBlendDetail(null);
+              loadBlends();
+            }}
+            className="text-xs font-semibold text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
+          >
             ← Back to all blends
           </button>
 
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <div className="text-center space-y-3">
-                <Loader2 className="w-8 h-8 text-violet-400 animate-spin mx-auto" />
-                <p className="text-xs text-slate-400">Calculating your blend…</p>
+                <Loader2 className="w-8 h-8 text-purple-400 animate-spin mx-auto" />
+                <p className="text-xs text-[#a1a1c2]">Calculating your blend…</p>
               </div>
             </div>
           ) : !blendDetail ? (
-            <div className="glass-panel p-8 text-center text-slate-400">Blend not found.</div>
-          ) : blendDetail.status === 'pending' ? (
-            <div className="glass-panel p-10 text-center space-y-4 border border-amber-500/20">
-              <Loader2 className="w-10 h-10 text-amber-400 mx-auto animate-pulse" />
-              <h3 className="text-lg font-bold text-white">Waiting for your friend to join</h3>
-              <p className="text-sm text-slate-400 max-w-md mx-auto">
-                Share the invite link with your friend. Once they accept, your blend will be calculated.
-              </p>
-              {blendDetail.inviteToken && (
-                <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 flex items-center gap-2 max-w-md mx-auto">
-                  <input type="text" readOnly
-                    value={`${window.location.origin}${window.location.pathname}?blend=${blendDetail.inviteToken}`}
-                    className="flex-1 bg-transparent text-xs text-slate-300 font-mono outline-none min-w-0"
-                  />
-                  <button type="button" onClick={() => {
-                    const url = `${window.location.origin}${window.location.pathname}?blend=${blendDetail.inviteToken}`;
-                    navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 3000); });
-                  }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-500 rounded-lg text-xs font-semibold text-white transition-colors flex-shrink-0">
-                    {copied ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    {copied ? 'Copied!' : 'Copy'}
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : blendDetail.status === 'expired' ? (
-            <div className="glass-panel p-8 text-center space-y-3 border border-slate-700">
-              <AlertCircle className="w-8 h-8 text-slate-500 mx-auto" />
-              <h3 className="text-lg font-bold text-slate-300">Blend Expired</h3>
-              <p className="text-sm text-slate-500">This blend invitation has expired. Create a new one.</p>
-            </div>
-          ) : blendDetail.profilesReady && (!blendDetail.profilesReady.creator || !blendDetail.profilesReady.participant) ? (
-            <div className="glass-panel p-10 text-center space-y-4 border border-blue-500/20">
-              <UserCircle2 className="w-10 h-10 text-blue-400 mx-auto" />
-              <h3 className="text-lg font-bold text-white">Profiles Needed</h3>
-              <p className="text-sm text-slate-400 max-w-md mx-auto">
-                {blendDetail.message || 'Both users need a MusicLens profile before we can calculate your Blend.'}
-              </p>
-              <div className="flex gap-3 justify-center text-xs">
-                <span className={`px-3 py-1.5 rounded-lg border ${
-                  blendDetail.profilesReady.creator ? 'bg-emerald-950 border-emerald-800 text-emerald-400' : 'bg-red-950 border-red-800 text-red-400'
-                }`}>
-                  {blendDetail.creatorEmail}: {blendDetail.profilesReady.creator ? '✓ Ready' : '✗ No profile'}
-                </span>
-                <span className={`px-3 py-1.5 rounded-lg border ${
-                  blendDetail.profilesReady.participant ? 'bg-emerald-950 border-emerald-800 text-emerald-400' : 'bg-red-950 border-red-800 text-red-400'
-                }`}>
-                  {blendDetail.participantEmail}: {blendDetail.profilesReady.participant ? '✓ Ready' : '✗ No profile'}
-                </span>
-              </div>
-              <button type="button" onClick={() => handleViewBlend(blendDetail.blendId)}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs font-semibold text-white transition-colors flex items-center gap-1.5 mx-auto">
-                <RefreshCw className="w-3.5 h-3.5" /> Recheck
-              </button>
-            </div>
+            <div className="glass-panel p-8 text-center text-[#a1a1c2]">Blend not found.</div>
           ) : blendDetail.result ? (
             <BlendResult
               result={blendDetail.result}
               creatorEmail={blendDetail.creatorEmail}
               participantEmail={blendDetail.participantEmail}
             />
+          ) : blendDetail.status === 'pending' ? (
+            <EmptyState
+              icon={Users}
+              title="Waiting for your friend to join"
+              message="Share the invite link with your friend. Once they accept, your blend will be calculated."
+            />
           ) : (
-            <div className="glass-panel p-8 text-center text-slate-400">
-              <Loader2 className="w-6 h-6 text-violet-400 animate-spin mx-auto mb-3" />
-              <p className="text-sm">Calculating your blend…</p>
-            </div>
+            <EmptyState
+              icon={AlertCircle}
+              title="Profiles Needed"
+              message={blendDetail.message || 'Both users need a completed profile before calculating the Blend.'}
+            />
           )}
         </div>
       )}
-
     </div>
   );
 }

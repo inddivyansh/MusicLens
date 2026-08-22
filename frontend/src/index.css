@@ -3,29 +3,35 @@
 @tailwind utilities;
 
 /* ============================================================
-   MusicLens — Enterprise Design System & Styling
+   MusicLens — Violet / Disc Consumer Design System
    ============================================================ */
 
 :root {
-  --bg-main: #090d16;
-  --bg-surface: #111827;
-  --bg-surface-elevated: #1e293b;
-  --bg-surface-hover: #273549;
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-active: rgba(59, 130, 246, 0.4);
+  --bg-main: #0b0713;
+  --bg-surface: #140e24;
+  --bg-surface-elevated: #1e1533;
+  --bg-surface-hover: #2a1f45;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-active: rgba(168, 85, 247, 0.4);
   
-  --primary: #3b82f6;
-  --primary-glow: rgba(59, 130, 246, 0.25);
-  --accent-edm: #10b981;
-  --accent-rap: #8b5cf6;
-  --accent-pop: #3b82f6;
-  --accent-latin: #f59e0b;
-  --accent-rock: #ef4444;
-  --accent-rnb: #ec4899;
+  --primary: #a855f7;        /* violet-500 */
+  --primary-hover: #c084fc;  /* violet-400 */
+  --primary-deep: #7c3aed;   /* violet-600 */
+  --accent-indigo: #6366f1;  /* indigo-500 */
+  --primary-glow: rgba(168, 85, 247, 0.25);
 
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-primary: #f5f3ff;
+  --text-secondary: #a1a1c2;
+  --text-muted: #6b6b8f;
+
+  /* Categorical genre palette */
+  --genre-pop: #6366f1;      /* indigo */
+  --genre-rap: #f59e0b;      /* amber */
+  --genre-rock: #ef4444;     /* red */
+  --genre-latin: #14b8a6;    /* teal */
+  --genre-rnb: #ec4899;      /* pink */
+  --genre-edm: #22d3ee;      /* cyan */
+  --genre-other: #a1a1c2;
   
   --font-heading: 'Outfit', sans-serif;
   --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -59,7 +65,7 @@ code, pre {
 
 /* Glassmorphism containers */
 .glass-panel {
-  background: rgba(17, 24, 39, 0.75);
+  background: rgba(20, 14, 36, 0.75);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-subtle);
@@ -68,26 +74,30 @@ code, pre {
 }
 
 .glass-panel:hover {
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .glass-card-interactive {
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 21, 51, 0.6);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  transition: all 0.2s ease;
+  border-radius: 16px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-card-interactive:hover {
-  background: rgba(39, 53, 73, 0.8);
+  background: var(--bg-surface-hover);
   border-color: var(--border-active);
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.5), 0 0 16px -4px var(--primary-glow);
 }
 
-/* Glowing text and badges */
+/* Signature brand gradients */
+.bg-signature-gradient {
+  background: linear-gradient(135deg, #7c3aed 0%, #a855f7 45%, #6366f1 100%);
+}
+
 .text-gradient {
-  background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #34d399 100%);
+  background: linear-gradient(135deg, #c084fc 0%, #a855f7 45%, #818cf8 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -100,8 +110,8 @@ code, pre {
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -109,41 +119,41 @@ code, pre {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #2a1f45;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #43336c;
 }
 
 /* Genre Pills */
 .genre-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
+  gap: 5px;
+  padding: 3px 9px;
   border-radius: 9999px;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
 }
 
-.genre-pop   { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
-.genre-rap   { background: rgba(139, 92, 246, 0.15); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.3); }
+.genre-pop   { background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
+.genre-rap   { background: rgba(245, 158, 11, 0.15);  color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
 .genre-rock  { background: rgba(239, 68, 68, 0.15);   color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
-.genre-latin { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
-.genre-rnb   { background: rgba(236, 72, 153, 0.15); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.3); }
-.genre-edm   { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
-.genre-other { background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }
+.genre-latin { background: rgba(20, 184, 166, 0.15);  color: #2dd4bf; border: 1px solid rgba(20, 184, 166, 0.3); }
+.genre-rnb   { background: rgba(236, 72, 153, 0.15);  color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.3); }
+.genre-edm   { background: rgba(34, 211, 238, 0.15);  color: #67e8f9; border: 1px solid rgba(34, 211, 238, 0.3); }
+.genre-other { background: rgba(161, 161, 194, 0.15); color: #c4c4e0; border: 1px solid rgba(161, 161, 194, 0.3); }
 
 /* Progress / Gauge Bars */
 .progress-bar-bg {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
   border-radius: 9999px;
   overflow: hidden;
-  height: 8px;
+  height: 6px;
 }
 
 .progress-bar-fill {
@@ -154,10 +164,26 @@ code, pre {
 
 /* Animations */
 @keyframes pulseGlow {
-  0%, 100% { opacity: 0.4; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(1.05); }
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.04); }
 }
 
 .animate-pulse-glow {
   animation: pulseGlow 4s ease-in-out infinite;
 }
+
+@keyframes fadeInSlide {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tab-content-enter {
+  animation: fadeInSlide 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
