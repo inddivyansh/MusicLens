@@ -74,8 +74,8 @@ function RecCard({ rec, rank }) {
 
         <div className="flex items-center gap-4 shrink-0 font-mono">
           <div className="text-right">
-            <span className="text-[10px] text-slate-500 block uppercase">Match</span>
-            <span className="text-base font-extrabold text-emerald-400">{rec.similarity_pct}%</span>
+            <span className="text-[10px] text-slate-500 block uppercase">Similarity score</span>
+            <span className="text-base font-extrabold text-emerald-400">{Number(rec.similarity_score || 0).toFixed(3)}</span>
           </div>
           <div className="border-l border-slate-800 pl-4 text-right">
             <span className="text-[10px] text-slate-500 block uppercase">Pop</span>
@@ -85,19 +85,24 @@ function RecCard({ rec, rank }) {
       </div>
 
       {/* Explanation pills */}
-      {rec.explanation?.topMatchingFeatures && (
+      {rec.explanation?.strongest_feature_alignments && (
         <div className="flex flex-wrap gap-2 pt-1">
-          {rec.explanation.topMatchingFeatures.map((m) => (
+          {rec.explanation.strongest_feature_alignments.map((m) => (
             <span key={m.feature}
               className="px-2.5 py-1 rounded-md text-[11px] font-mono bg-slate-800/80 text-slate-300 border border-slate-700 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
               <span className="capitalize">{m.feature}</span>
-              <span className="text-blue-400 font-bold">{m.proximityPct}%</span>
+              <span className="text-blue-400 font-bold">Δ {m.standardized_delta}σ</span>
             </span>
           ))}
-          {rec.explanation.sharesGenre && (
+          {rec.explanation.genre_contribution?.matched_genres?.length > 0 && (
             <span className="px-2.5 py-1 rounded-md text-[11px] font-mono bg-purple-950/60 text-purple-300 border border-purple-800">
               ★ Genre match
+            </span>
+          )}
+          {rec.explanation.novelty_contribution && (
+            <span className="px-2.5 py-1 rounded-md text-[11px] font-mono bg-cyan-950/60 text-cyan-300 border border-cyan-800">
+              Novelty {rec.explanation.novelty_contribution.score}
             </span>
           )}
         </div>
@@ -112,23 +117,21 @@ function RecCard({ rec, rank }) {
       )}
 
       {/* Expandable feature detail */}
-      {rec.explanation?.featureDetails && (
+      {rec.explanation?.strongest_feature_alignments && (
         <button type="button"
           onClick={() => setExpanded((v) => !v)}
           className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors">
           {expanded ? '▲ Hide details' : '▼ Feature comparison'}
         </button>
       )}
-      {expanded && rec.explanation?.featureDetails && (
+      {expanded && rec.explanation?.strongest_feature_alignments && (
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 pt-1">
-          {rec.explanation.featureDetails.map((f) => (
+          {rec.explanation.strongest_feature_alignments.map((f) => (
             <div key={f.feature} className="bg-slate-900 rounded-lg p-1.5 text-center">
               <p className="text-[9px] text-slate-500 uppercase">{f.feature}</p>
-              <p className="text-[10px] text-slate-300 font-mono">You: {f.userValue}</p>
-              <p className="text-[10px] text-slate-300 font-mono">Track: {f.trackValue}</p>
-              <p className={`text-[10px] font-bold font-mono ${f.proximityPct >= 80 ? 'text-emerald-400' : f.proximityPct >= 60 ? 'text-amber-400' : 'text-slate-500'}`}>
-                {f.proximityPct}% match
-              </p>
+              <p className="text-[10px] text-slate-300 font-mono">You: {f.user_value}</p>
+              <p className="text-[10px] text-slate-300 font-mono">Track: {f.track_value}</p>
+              <p className="text-[10px] font-bold font-mono text-blue-400">Δ {f.standardized_delta}σ</p>
             </div>
           ))}
         </div>
@@ -246,8 +249,8 @@ export default function RecommenderTab({ searchCatalog }) {
           Your MusicLens Recommendations
         </h1>
         <p className="text-sm text-slate-300 max-w-3xl mt-1">
-          Powered by your Spotify-derived MusicLens profile. Server-side cosine similarity
-          across the full 28K catalog — scaled to your actual taste.
+          Powered by your Spotify-derived MusicLens profile. The server retrieves
+          relevant catalog tracks, ranks them with transparent signals, then re-ranks for variety.
         </p>
       </div>
 
@@ -506,8 +509,9 @@ export default function RecommenderTab({ searchCatalog }) {
                             <span className="text-[11px] text-slate-400 block">{rec.track_artist}</span>
                           </div>
                         </div>
-                        <span className="font-bold text-sm text-emerald-400 font-mono flex-shrink-0">
-                          {rec.similarityPercentage}%
+                        <span className="text-right font-mono flex-shrink-0">
+                          <span className="text-[9px] text-slate-500 uppercase block">Similarity score</span>
+                          <span className="font-bold text-sm text-emerald-400">{Number(rec.similarityScore || 0).toFixed(3)}</span>
                         </span>
                       </div>
                       {rec.explanation?.topMatchingFeatures?.length > 0 && (

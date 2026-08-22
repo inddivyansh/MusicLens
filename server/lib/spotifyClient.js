@@ -185,20 +185,25 @@ async function fetchTopTracks(userId) {
 async function fetchRecentlyPlayed(userId) {
   try {
     const data = await spotifyGet(userId, '/me/player/recently-played', { limit: 50 });
-    const seen = new Set();
-    const tracks = [];
+    const byTrackId = new Map();
     for (const item of (data.items || [])) {
       const t = item.track;
-      if (!t || seen.has(t.id)) continue;
-      seen.add(t.id);
-      tracks.push({
-        spotify_track_id: t.id,
-        track_name: t.name,
-        artist_name: t.artists?.[0]?.name || '',
-        source: 'recently_played',
-      });
+      if (!t?.id) continue;
+      const existing = byTrackId.get(t.id);
+      if (existing) {
+        existing.interaction_count += 1;
+      } else {
+        byTrackId.set(t.id, {
+          spotify_track_id: t.id,
+          track_name: t.name,
+          artist_name: t.artists?.[0]?.name || '',
+          source: 'recently_played',
+          played_at: item.played_at || null,
+          interaction_count: 1,
+        });
+      }
     }
-    return tracks;
+    return [...byTrackId.values()];
   } catch (err) {
     if (err instanceof SpotifyAuthError) throw err;
     console.warn('[spotifyClient] fetchRecentlyPlayed failed:', err.message);
@@ -218,6 +223,7 @@ async function fetchLikedSongs(userId) {
         track_name: t.name,
         artist_name: t.artists?.[0]?.name || '',
         source: 'liked_songs',
+        added_at: item.added_at || null,
       });
     }
     return tracks;
@@ -280,4 +286,3 @@ module.exports = {
   SpotifyRateLimitError,
   SpotifyApiError,
 };
-

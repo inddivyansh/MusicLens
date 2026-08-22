@@ -172,8 +172,29 @@ module.exports = async function refreshProfile(req, res) {
     catalogArtistMap
   );
 
+  // Include in-app likes as an explicit, deduplicated taste source. They are
+  // passed separately so Spotify coverage and legacy baseline statistics are
+  // not inflated by MusicLens catalog interactions.
+  const manualTasteTracks = await sql`
+    SELECT
+      ult.catalog_track_id,
+      ult.liked_at,
+      af.danceability, af.energy, af.loudness, af.speechiness,
+      af.acousticness, af.instrumentalness, af.liveness, af.valence, af.tempo
+    FROM user_liked_tracks ult
+    JOIN audio_features af ON af.track_id = ult.catalog_track_id
+    WHERE ult.user_id = ${session.userId}
+    LIMIT 200
+  `.then((rows) => rows.map((row) => ({
+    ...row,
+    track_id: row.catalog_track_id,
+    source: 'manual',
+    added_at: row.liked_at,
+    interaction_count: 1,
+  }))).catch(() => []);
+
   // Compute rich taste profile & archetype
-  const profile = calculateProfile(derivedTracks, stats, spotifyTopArtists);
+  const profile = calculateProfile(derivedTracks, stats, spotifyTopArtists, manualTasteTracks);
   const syncedAt = new Date();
 
   const tMl = Date.now() - tMlStart;
@@ -186,7 +207,7 @@ module.exports = async function refreshProfile(req, res) {
       INSERT INTO user_profile_data (
         user_id,
         tracks_analyzed, tracks_matched, tracks_unmatched, tracks_ambiguous, coverage_pct,
-        audio_profile, raw_feature_means, preference_vector,
+        audio_profile, raw_feature_means, preference_vector, taste_representation,
         dominant_genres, dominant_subgenres, top_artists, mood_distribution,
         archetype, archetype_tagline, archetype_desc,
         last_spotify_sync, last_refreshed_at
@@ -198,6 +219,7 @@ module.exports = async function refreshProfile(req, res) {
         ${JSON.stringify(profile.audio_profile)},
         ${JSON.stringify(profile.raw_feature_means)},
         ${JSON.stringify(profile.preference_vector)},
+        ${JSON.stringify(profile.taste_representation)},
         ${JSON.stringify(profile.dominant_genres)},
         ${JSON.stringify(profile.dominant_subgenres)},
         ${JSON.stringify(profile.top_artists)},
@@ -214,6 +236,7 @@ module.exports = async function refreshProfile(req, res) {
         audio_profile      = EXCLUDED.audio_profile,
         raw_feature_means  = EXCLUDED.raw_feature_means,
         preference_vector  = EXCLUDED.preference_vector,
+        taste_representation = EXCLUDED.taste_representation,
         dominant_genres    = EXCLUDED.dominant_genres,
         dominant_subgenres = EXCLUDED.dominant_subgenres,
         top_artists        = EXCLUDED.top_artists,
@@ -258,4 +281,3 @@ module.exports = async function refreshProfile(req, res) {
     syncedAt: syncedAt.toISOString(),
   });
 };
-

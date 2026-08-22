@@ -1,0 +1,20 @@
+{
+  "trained_at_utc": "2026-08-22T09:39:10.401254+00:00",
+  "input_path": "data\\exports\\enriched_tracks.parquet",
+  "input_sha256": "fb907387cdf8cb7d73653a32ce1a4de0e3c46c17cc3dd504dab85e383a1160ba",
+  "catalog_rows": 28352,
+  "complete_feature_rows": 28352,
+  "feature_columns": [
+    "danceability",
+    "energy",
+    "loudness",
+    "speechiness",
+    "acousticness",
+    "instrumentalness",
+    "liveness",
+    "valence",
+    "tempo"
+  ],
+  "embedding_dimension": 8,
+  "model_type": "PCA"
+}

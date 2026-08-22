@@ -213,6 +213,9 @@ function deriveTrackFeatures(spotifyTracks, spotifyTopArtists = [], catalogTrack
         tempo: cat.tempo ?? DEFAULT_AUDIO_PROFILE.tempo,
         match_status: 'matched',
         source: t.source || 'top_tracks',
+        played_at: t.played_at || null,
+        added_at: t.added_at || null,
+        interaction_count: t.interaction_count || 1,
       });
       continue;
     }
@@ -238,6 +241,9 @@ function deriveTrackFeatures(spotifyTracks, spotifyTopArtists = [], catalogTrack
         tempo: catArt.tempo ?? DEFAULT_AUDIO_PROFILE.tempo,
         match_status: 'ambiguous',
         source: t.source || 'top_tracks',
+        played_at: t.played_at || null,
+        added_at: t.added_at || null,
+        interaction_count: t.interaction_count || 1,
       });
       continue;
     }
@@ -264,6 +270,9 @@ function deriveTrackFeatures(spotifyTracks, spotifyTopArtists = [], catalogTrack
         tempo: prof.tempo,
         match_status: 'ambiguous',
         source: t.source || 'top_tracks',
+        played_at: t.played_at || null,
+        added_at: t.added_at || null,
+        interaction_count: t.interaction_count || 1,
       });
       continue;
     }
@@ -287,6 +296,9 @@ function deriveTrackFeatures(spotifyTracks, spotifyTopArtists = [], catalogTrack
       tempo: DEFAULT_AUDIO_PROFILE.tempo,
       match_status: 'unmatched',
       source: t.source || 'top_tracks',
+      played_at: t.played_at || null,
+      added_at: t.added_at || null,
+      interaction_count: t.interaction_count || 1,
     });
   }
 
@@ -312,7 +324,12 @@ function deriveTrackFeatures(spotifyTracks, spotifyTopArtists = [], catalogTrack
  * @param {object} coverageStats
  * @param {Array} topArtistsFromSpotify
  */
-function calculateProfile(derivedTracks, coverageStats = {}, topArtistsFromSpotify = []) {
+function calculateProfile(
+  derivedTracks,
+  coverageStats = {},
+  topArtistsFromSpotify = [],
+  additionalTasteTracks = [],
+) {
   const stats = {
     total: coverageStats.total ?? derivedTracks.length,
     matched: coverageStats.matched ?? 0,
@@ -332,6 +349,7 @@ function calculateProfile(derivedTracks, coverageStats = {}, topArtistsFromSpoti
       audio_profile: null,
       raw_feature_means: null,
       preference_vector: null,
+      taste_representation: null,
       dominant_genres: {},
       dominant_subgenres: {},
       top_artists: [],
@@ -342,7 +360,7 @@ function calculateProfile(derivedTracks, coverageStats = {}, topArtistsFromSpoti
     };
   }
 
-  // ── 1. Average audio features ──────────────────────────────────────────
+  // ── 1. Legacy baseline audio means (kept for baseline comparison) ──────
   const rawMeans = {};
   for (const feat of RECOMMENDATION_FEATURES) {
     const vals = derivedTracks.map((r) => r[feat]).filter((v) => v != null && !isNaN(v));
@@ -364,8 +382,18 @@ function calculateProfile(derivedTracks, coverageStats = {}, topArtistsFromSpoti
     avg_loudness_db:      Math.round(rawMeans.loudness * 100) / 100,
   };
 
-  // ── 3. Preference vector (for Recommendation & Blend engines) ─────────
+  // ── 3. Baseline preference vector (for comparison and Friend Blend) ────
   const preferenceVector = RECOMMENDATION_FEATURES.map((f) => rawMeans[f]);
+
+  // The enhanced representation is source-aware and is consumed by the
+  // recommendation service. Require lazily to avoid a module cycle because
+  // tasteProfile imports the feature-order constant from this module.
+  // eslint-disable-next-line global-require
+  const { buildTasteRepresentation } = require('./tasteProfile');
+  const tasteRepresentation = buildTasteRepresentation([
+    ...derivedTracks,
+    ...(Array.isArray(additionalTasteTracks) ? additionalTasteTracks : []),
+  ]);
 
   // ── 4. Dominant genres ────────────────────────────────────────────────
   const genreCounts = {};
@@ -462,6 +490,7 @@ function calculateProfile(derivedTracks, coverageStats = {}, topArtistsFromSpoti
     audio_profile: audioProfile,
     raw_feature_means: rawMeans,
     preference_vector: preferenceVector,
+    taste_representation: tasteRepresentation,
     dominant_genres: dominantGenres,
     dominant_subgenres: {},
     top_artists: topArtists,
@@ -481,4 +510,3 @@ module.exports = {
   GENRE_AUDIO_PROFILES,
   DEFAULT_AUDIO_PROFILE,
 };
-

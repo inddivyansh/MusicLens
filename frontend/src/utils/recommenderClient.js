@@ -288,7 +288,6 @@ export function generateRecommendations(catalog, selectedSongs, options = {}) {
     candidates.push({
       ...song,
       similarityScore: Number(sim.toFixed(4)),
-      similarityPercentage: Number((Math.max(0, sim) * 100).toFixed(1)),
       explanation: {
         topMatchingFeatures: topMatches.map(m => ({
           feature: m.feature,

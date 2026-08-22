@@ -1,28 +1,20 @@
 /**
- * server/lib/recommender.js
- * Server-side MusicLens content-based recommendation engine.
+ * MusicLens recommendation pipeline.
  *
- * Algorithm (mirrors pipeline/utils/recommender.py and frontend recommenderClient.js):
- *   1. Load the user's preference_vector from user_profile_data (9-dim, raw means).
- *   2. Also pull any manual liked tracks and blend them into the user vector.
- *   3. Load candidate tracks from track_feature_vectors (or base tables as fallback).
- *   4. Z-score standardize BOTH the user vector AND all candidate vectors using
- *      catalog-derived means/stds (computed once per request from the candidate set).
- *   5. Compute cosine similarity between standardized user vector and each candidate.
- *   6. Exclude already-liked and seed tracks.
- *   7. Rank by similarity, apply genre/popularity filters, return top N.
- *   8. Generate per-feature explainability with natural-language narrative.
+ * baseline_content_recommender:
+ *   mean profile -> canonical StandardScaler -> cosine retrieval -> ranking
+ * personalized_recommender:
+ *   Phase 1 taste profile -> canonical StandardScaler + PCA -> cosine retrieval
+ *   -> configurable relevance ranking -> MMR diversity re-ranking.
  *
- * RECOMMENDATION_FEATURES order (must match profileCalculator.js and Python config.py):
- *   [danceability, energy, loudness, speechiness, acousticness,
- *    instrumentalness, liveness, valence, tempo]
- *
- * Important: the preference_vector is raw (unscaled) mean values.
- * Standardization is applied here so both user and catalog are in the same space.
+ * This module is the server-side source of truth for personalized ranking.
+ * It never derives scaling statistics from a request, filter, or candidate set.
  */
 
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const { getDb } = require('./db');
 
 const FEATURES = [
@@ -30,133 +22,363 @@ const FEATURES = [
   'acousticness', 'instrumentalness', 'liveness', 'valence', 'tempo',
 ];
 
-// ── Math helpers ──────────────────────────────────────────────────────────
-
-function mean(arr) {
-  if (arr.length === 0) return 0;
-  return arr.reduce((a, b) => a + b, 0) / arr.length;
-}
-
-function std(arr, m) {
-  if (arr.length < 2) return 1; // avoid division by zero
-  const mu = m ?? mean(arr);
-  const variance = arr.reduce((s, x) => s + (x - mu) ** 2, 0) / arr.length;
-  return Math.sqrt(variance) || 1;
-}
+const DEFAULT_RECOMMENDATION_CONFIG = Object.freeze({
+  retrieval: { candidate_limit: 500 },
+  ranking: {
+    weights: {
+      audio_similarity: 0.8,
+      genre_affinity: 0.08,
+      artist_affinity: 0.04,
+      popularity_prior: 0.02,
+      novelty: 0.06,
+    },
+  },
+  diversity: {
+    mmr_lambda: 0.75,
+    max_per_artist: 2,
+    genre_repeat_penalty: 0.04,
+    exclude_seed_artists: false,
+  },
+  novelty: { method: 'inverse_log_catalog_popularity' },
+});
 
 function cosineSimilarity(a, b) {
-  let dot = 0, normA = 0, normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot   += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let index = 0; index < a.length; index += 1) {
+    dot += a[index] * b[index];
+    normA += a[index] * a[index];
+    normB += b[index] * b[index];
   }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  return denom === 0 ? 0 : dot / denom;
+  const denominator = Math.sqrt(normA) * Math.sqrt(normB);
+  return denominator === 0 ? 0 : dot / denominator;
 }
 
-// ── Standardization ───────────────────────────────────────────────────────
-
-/**
- * Compute per-feature mean and std from a set of candidate rows.
- * Returns { featureName: { mean, std } }
- */
-function computeScalingParams(rows) {
-  const params = {};
-  for (const feat of FEATURES) {
-    const vals = rows.map((r) => Number(r[feat])).filter((v) => !isNaN(v));
-    const m = mean(vals);
-    params[feat] = { mean: m, std: std(vals, m) };
-  }
-  return params;
+/** Compatibility helper that returns only persisted catalog-wide statistics. */
+function computeScalingParams() {
+  const preprocessing = loadCanonicalPreprocessing();
+  if (!preprocessing) throw new Error('Canonical recommendation preprocessing artifact is unavailable.');
+  return preprocessing.params;
 }
 
-/**
- * Z-score a single feature vector using pre-computed scaling params.
- * Returns Float64Array of length FEATURES.length.
- */
 function standardize(rawVector, params) {
-  return FEATURES.map((feat, i) => {
-    const { mean: mu, std: sigma } = params[feat];
-    return (rawVector[i] - mu) / sigma;
+  return FEATURES.map((feature, index) => {
+    const { mean, std } = params[feature];
+    return (rawVector[index] - mean) / std;
   });
 }
 
-// ── Explainability ────────────────────────────────────────────────────────
+function parseJsonValue(value) {
+  if (!value || typeof value === 'object') return value || null;
+  try { return JSON.parse(value); } catch { return null; }
+}
 
-const FEATURE_LABELS = {
-  danceability: 'danceability', energy: 'energy', loudness: 'loudness',
-  speechiness: 'speechiness', acousticness: 'acousticness',
-  instrumentalness: 'instrumentalness', liveness: 'liveness',
-  valence: 'mood/valence', tempo: 'tempo',
-};
+function loadCanonicalPreprocessing() {
+  const artifactPath = path.join(__dirname, '..', '..', 'ml', 'artifacts', 'preprocessing.json');
+  try {
+    const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+    if (
+      !Array.isArray(artifact.feature_columns)
+      || artifact.feature_columns.join('|') !== FEATURES.join('|')
+      || !Array.isArray(artifact?.scaler?.mean)
+      || !Array.isArray(artifact?.scaler?.scale)
+      || !Array.isArray(artifact?.pca?.components)
+    ) return null;
+    const params = Object.fromEntries(FEATURES.map((feature, index) => [feature, {
+      mean: Number(artifact.scaler.mean[index]),
+      std: Number(artifact.scaler.scale[index]),
+    }]));
+    if (Object.values(params).some(({ mean, std }) => !Number.isFinite(mean) || !Number.isFinite(std) || std === 0)) return null;
+    return { params, pcaComponents: artifact.pca.components };
+  } catch {
+    return null;
+  }
+}
+
+function loadRecommendationConfig() {
+  const configPath = path.join(__dirname, '..', '..', 'ml', 'recommendation_config.json');
+  try {
+    const configured = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    return {
+      ...DEFAULT_RECOMMENDATION_CONFIG,
+      ...configured,
+      retrieval: { ...DEFAULT_RECOMMENDATION_CONFIG.retrieval, ...(configured.retrieval || {}) },
+      ranking: {
+        ...DEFAULT_RECOMMENDATION_CONFIG.ranking,
+        ...(configured.ranking || {}),
+        weights: {
+          ...DEFAULT_RECOMMENDATION_CONFIG.ranking.weights,
+          ...(configured.ranking?.weights || {}),
+        },
+      },
+      diversity: { ...DEFAULT_RECOMMENDATION_CONFIG.diversity, ...(configured.diversity || {}) },
+      novelty: { ...DEFAULT_RECOMMENDATION_CONFIG.novelty, ...(configured.novelty || {}) },
+    };
+  } catch {
+    return DEFAULT_RECOMMENDATION_CONFIG;
+  }
+}
+
+function projectPca(vector, components) {
+  return components.map((component) => component.reduce(
+    (sum, coefficient, index) => sum + Number(coefficient) * vector[index], 0,
+  ));
+}
+
+function rawTrackVector(track) {
+  const vector = FEATURES.map((feature) => Number(track[feature]));
+  return vector.every(Number.isFinite) ? vector : null;
+}
+
+function normalizeName(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function genreSet(value) {
+  return new Set(String(value || '').split(',').map((genre) => normalizeName(genre)).filter(Boolean));
+}
+
+function clamp(value, minimum = 0, maximum = 1) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function round(value, digits = 4) {
+  const multiplier = 10 ** digits;
+  return Math.round(value * multiplier) / multiplier;
+}
+
+function profileGenreAffinity(trackGenres, dominantGenres) {
+  const normalizedProfile = parseJsonValue(dominantGenres) || {};
+  const candidates = [...trackGenres].map((genre) => Number(normalizedProfile[genre]) || 0);
+  return clamp(Math.max(0, ...candidates) / 100);
+}
+
+function profileArtistAffinity(artistName, topArtists) {
+  const artists = parseJsonValue(topArtists) || [];
+  const artistSet = new Set(artists.map((artist) => normalizeName(artist.artist || artist.artist_name)));
+  return artistSet.has(normalizeName(artistName)) ? 1 : 0;
+}
+
+function popularitySignals(popularity) {
+  const boundedPopularity = clamp(Number(popularity) / 100);
+  const popularityPrior = Math.log1p(boundedPopularity * 100) / Math.log(101);
+  return {
+    popularityPrior,
+    novelty: 1 - popularityPrior,
+  };
+}
+
+function transformForMode(rawVector, context) {
+  const standardized = standardize(rawVector, context.preprocessing.params);
+  return context.mode === 'personalized_recommender'
+    ? projectPca(standardized, context.preprocessing.pcaComponents)
+    : standardized;
+}
 
 /**
- * Given user and track raw vectors + scaling params, produce feature-level explanation.
+ * Stage 1: retrieve a bounded set of semantically similar candidates.
+ * The only catalog-wide work is one linear scan plus sort; later stages never
+ * compare every catalog track with every other catalog track.
  */
-function buildExplanation(userRaw, trackRaw, scalingParams, trackGenre, userGenres) {
-  // Per-feature absolute difference in standardized space → proximity %
-  const featureDetails = FEATURES.map((feat, i) => {
-    const { mean: mu, std: sigma } = scalingParams[feat];
-    const uScaled = (userRaw[i] - mu) / sigma;
-    const tScaled = (trackRaw[i] - mu) / sigma;
-    const diff = Math.abs(uScaled - tScaled);
-    // Proximity: 1 std diff → 50%, 0 diff → 100%
-    const proximityPct = Math.max(0, Math.round((1 - diff / 2) * 100));
+function retrieveCandidates(catalog, context) {
+  const retrieved = [];
+  for (const track of catalog) {
+    if (context.excludeTrackIds.has(track.track_id)) continue;
+    if (context.excludeArtistNames.has(normalizeName(track.artist_name))) continue;
+    const rawVector = rawTrackVector(track);
+    if (!rawVector) continue;
+    const vector = transformForMode(rawVector, context);
+    const rawSimilarity = cosineSimilarity(context.userVector, vector);
+    retrieved.push({
+      track,
+      rawVector,
+      vector,
+      raw_similarity: rawSimilarity,
+      normalized_similarity: clamp((rawSimilarity + 1) / 2),
+      track_genres: genreSet(track.genre_name),
+    });
+  }
+  retrieved.sort((left, right) => (
+    right.raw_similarity - left.raw_similarity
+    || Number(right.track.track_popularity || 0) - Number(left.track.track_popularity || 0)
+    || String(left.track.track_id).localeCompare(String(right.track.track_id))
+  ));
+  return retrieved.slice(0, Math.max(context.limit, Number(context.config.retrieval.candidate_limit) || context.limit));
+}
+
+/** Stage 2: combine configured relevance signals without treating cosine as probability. */
+function rankCandidates(candidates, context) {
+  const weights = context.config.ranking.weights;
+  return candidates.map((candidate) => {
+    const genreAffinity = profileGenreAffinity(candidate.track_genres, context.dominantGenres);
+    const artistAffinity = profileArtistAffinity(candidate.track.artist_name, context.topArtists);
+    const { popularityPrior, novelty } = popularitySignals(candidate.track.track_popularity);
+    const relevanceScore = (
+      weights.audio_similarity * candidate.normalized_similarity
+      + weights.genre_affinity * genreAffinity
+      + weights.artist_affinity * artistAffinity
+      + weights.popularity_prior * popularityPrior
+      + weights.novelty * novelty
+    );
     return {
-      feature: feat,
-      userValue: Math.round(userRaw[i] * 1000) / 1000,
-      trackValue: Math.round(trackRaw[i] * 1000) / 1000,
-      difference: Math.round((trackRaw[i] - userRaw[i]) * 1000) / 1000,
-      proximityPct,
+      ...candidate,
+      relevance_score: relevanceScore,
+      signals: {
+        audio_similarity: candidate.raw_similarity,
+        genre_affinity: genreAffinity,
+        artist_affinity: artistAffinity,
+        popularity_prior: popularityPrior,
+        novelty,
+      },
     };
-  });
+  }).sort((left, right) => (
+    right.relevance_score - left.relevance_score
+    || right.raw_similarity - left.raw_similarity
+    || String(left.track.track_id).localeCompare(String(right.track.track_id))
+  ));
+}
 
-  // Top 3 closest features
-  const topFeatures = [...featureDetails]
-    .sort((a, b) => b.proximityPct - a.proximityPct)
-    .slice(0, 3);
+/** Baseline comparison path: canonical-scaled cosine only, with deterministic ties. */
+function rankBaselineCandidates(candidates) {
+  return candidates.map((candidate) => ({
+    ...candidate,
+    relevance_score: candidate.normalized_similarity,
+    signals: {
+      audio_similarity: candidate.raw_similarity,
+      genre_affinity: 0,
+      artist_affinity: 0,
+      popularity_prior: 0,
+      novelty: 0,
+    },
+  })).sort((left, right) => (
+    right.raw_similarity - left.raw_similarity
+    || Number(right.track.track_popularity || 0) - Number(left.track.track_popularity || 0)
+    || String(left.track.track_id).localeCompare(String(right.track.track_id))
+  ));
+}
 
-  // Genre overlap
-  const sharesGenre = trackGenre && userGenres
-    ? trackGenre.split(', ').some((g) => userGenres[g.trim()])
-    : false;
+function sharedGenreCount(candidate, selected) {
+  return selected.reduce((count, item) => (
+    [...candidate.track_genres].some((genre) => item.track_genres.has(genre)) ? count + 1 : count
+  ), 0);
+}
 
-  // Natural language narrative
-  const topLabels = topFeatures.map((f) => FEATURE_LABELS[f.feature] || f.feature);
-  let narrative;
-  if (topFeatures[0].proximityPct >= 85) {
-    narrative = `Strong match for your ${topLabels[0]} and ${topLabels[1]} preferences.`;
-  } else if (topFeatures[0].proximityPct >= 70) {
-    narrative = `Recommended because its ${topLabels.join(', ')} closely match your MusicLens profile.`;
-  } else {
-    narrative = `Shares similar ${topLabels[0]} characteristics with your listening history.`;
+/**
+ * Stage 3: maximal marginal relevance (MMR) over the retrieved set, plus a
+ * configurable soft genre-repeat penalty and a hard artist cap.
+ */
+function rerankForDiversity(rankedCandidates, context) {
+  const selected = [];
+  const artistCounts = new Map();
+  const remaining = [...rankedCandidates];
+  const { mmr_lambda: mmrLambda, max_per_artist: configuredArtistLimit, genre_repeat_penalty: genrePenalty } = context.config.diversity;
+  const maxPerArtist = Math.max(1, Number(configuredArtistLimit) || 1);
+
+  while (selected.length < context.limit && remaining.length > 0) {
+    let bestIndex = -1;
+    let best = null;
+    for (let index = 0; index < remaining.length; index += 1) {
+      const candidate = remaining[index];
+      const artist = normalizeName(candidate.track.artist_name);
+      if ((artistCounts.get(artist) || 0) >= maxPerArtist) continue;
+      const maxSimilarityToSelected = selected.length === 0
+        ? 0
+        : Math.max(0, ...selected.map((item) => cosineSimilarity(candidate.vector, item.vector)));
+      const repeatedGenres = sharedGenreCount(candidate, selected);
+      const diversityPenalty = (1 - mmrLambda) * maxSimilarityToSelected + genrePenalty * repeatedGenres;
+      const mmrScore = mmrLambda * candidate.relevance_score - diversityPenalty;
+      if (
+        !best
+        || mmrScore > best.mmr_score
+        || (mmrScore === best.mmr_score && candidate.relevance_score > best.relevance_score)
+        || (mmrScore === best.mmr_score && candidate.relevance_score === best.relevance_score
+          && String(candidate.track.track_id).localeCompare(String(best.track.track_id)) < 0)
+      ) {
+        bestIndex = index;
+        best = { ...candidate, mmr_score: mmrScore, max_similarity_to_selected: maxSimilarityToSelected, repeated_genres: repeatedGenres, diversity_penalty: diversityPenalty };
+      }
+    }
+    if (bestIndex === -1) break;
+    remaining.splice(bestIndex, 1);
+    selected.push(best);
+    const artist = normalizeName(best.track.artist_name);
+    artistCounts.set(artist, (artistCounts.get(artist) || 0) + 1);
   }
-  if (sharesGenre) {
-    narrative += ` Also matches your dominant genre taste.`;
-  }
+  return selected;
+}
 
+function buildFeatureAlignments(userRawVector, candidateRawVector, scalingParams) {
+  return FEATURES.map((feature, index) => {
+    const standardizedDelta = (candidateRawVector[index] - userRawVector[index]) / scalingParams[feature].std;
+    return {
+      feature,
+      user_value: round(userRawVector[index], 3),
+      track_value: round(candidateRawVector[index], 3),
+      raw_delta: round(candidateRawVector[index] - userRawVector[index], 3),
+      standardized_delta: round(standardizedDelta, 3),
+      absolute_standardized_delta: round(Math.abs(standardizedDelta), 3),
+    };
+  }).sort((left, right) => left.absolute_standardized_delta - right.absolute_standardized_delta).slice(0, 3);
+}
+
+function buildExplanation(candidate, context) {
+  const strongestFeatureAlignments = buildFeatureAlignments(
+    context.userRawVector,
+    candidate.rawVector,
+    context.preprocessing.params,
+  );
+  const matchedGenres = [...candidate.track_genres].filter((genre) => profileGenreAffinity(new Set([genre]), context.dominantGenres) > 0);
+  const rankingSignals = {
+    audio_similarity: round(candidate.signals.audio_similarity),
+    genre_affinity: round(candidate.signals.genre_affinity),
+    artist_affinity: round(candidate.signals.artist_affinity),
+    popularity_prior: round(candidate.signals.popularity_prior),
+    novelty: round(candidate.signals.novelty),
+    relevance_score: round(candidate.relevance_score),
+  };
+  const diversity = context.mode === 'personalized_recommender' ? {
+    mmr_score: round(candidate.mmr_score),
+    max_similarity_to_previously_selected: round(candidate.max_similarity_to_selected),
+    genre_repeat_count: candidate.repeated_genres,
+    diversity_penalty: round(candidate.diversity_penalty),
+  } : null;
+  const details = ['audio-profile similarity'];
+  if (candidate.signals.genre_affinity > 0) details.push('genre affinity');
+  if (candidate.signals.artist_affinity > 0) details.push('artist affinity');
+  if (candidate.signals.novelty > 0.5) details.push('catalog novelty');
+  const narrative = context.mode === 'personalized_recommender'
+    ? `Ranked by ${details.join(', ')} and selected with diversity-aware re-ranking.`
+    : 'Ranked by canonical audio-feature cosine similarity in baseline mode.';
   return {
-    topMatchingFeatures: topFeatures.map((f) => ({
-      feature: f.feature,
-      proximityPct: f.proximityPct,
-      userValue: f.userValue,
-      trackValue: f.trackValue,
-      difference: f.difference,
-    })),
-    featureDetails,
-    sharesGenre,
+    strongest_feature_alignments: strongestFeatureAlignments,
+    feature_deltas: strongestFeatureAlignments,
+    genre_contribution: { matched_genres: matchedGenres, score: round(candidate.signals.genre_affinity) },
+    novelty_contribution: { method: context.config.novelty.method, score: round(candidate.signals.novelty) },
+    diversity_reranking: diversity,
+    ranking_signals: rankingSignals,
     narrative,
   };
 }
 
-// ── Catalog loader (shared by recommendations + blend) ────────────────────
+/** Stage 4: return API-compatible track payloads plus transparent attributions. */
+function buildRecommendations(selectedCandidates, context) {
+  return selectedCandidates.map((candidate, index) => ({
+    rank: index + 1,
+    track_id: candidate.track.track_id,
+    track_name: candidate.track.track_name,
+    artist_name: candidate.track.artist_name,
+    genre_name: candidate.track.genre_name || null,
+    track_popularity: candidate.track.track_popularity,
+    // Raw cosine similarity: a geometric score, not a probability or match percentage.
+    similarity_score: round(candidate.raw_similarity),
+    relevance_score: round(candidate.relevance_score),
+    audio_features: Object.fromEntries(FEATURES.map((feature) => [feature, candidate.track[feature]])),
+    explanation: buildExplanation(candidate, context),
+  }));
+}
 
-/**
- * Load candidate tracks from the MusicLens catalog.
- * Prefers the materialized view; falls back to base tables.
- */
-async function loadCandidates(sql, genre, minPop) {
+async function loadCandidates(sql, genre, minPopularity) {
   try {
     return genre
       ? await sql`
@@ -164,7 +386,7 @@ async function loadCandidates(sql, genre, minPop) {
                  danceability, energy, loudness, speechiness, acousticness,
                  instrumentalness, liveness, valence, tempo
           FROM track_feature_vectors
-          WHERE track_popularity >= ${minPop}
+          WHERE track_popularity >= ${minPopularity}
             AND genre_name ILIKE ${'%' + genre + '%'}
           ORDER BY track_popularity DESC
         `
@@ -173,11 +395,10 @@ async function loadCandidates(sql, genre, minPop) {
                  danceability, energy, loudness, speechiness, acousticness,
                  instrumentalness, liveness, valence, tempo
           FROM track_feature_vectors
-          WHERE track_popularity >= ${minPop}
+          WHERE track_popularity >= ${minPopularity}
           ORDER BY track_popularity DESC
         `;
   } catch {
-    // Fallback to base tables if materialized view unavailable
     return genre
       ? await sql`
           SELECT t.track_id, t.track_name, a.artist_name,
@@ -185,12 +406,11 @@ async function loadCandidates(sql, genre, minPop) {
                  t.track_popularity,
                  af.danceability, af.energy, af.loudness, af.speechiness,
                  af.acousticness, af.instrumentalness, af.liveness, af.valence, af.tempo
-          FROM tracks t
-          JOIN artists a        ON a.artist_id = t.artist_id
+          FROM tracks t JOIN artists a ON a.artist_id = t.artist_id
           JOIN audio_features af ON af.track_id = t.track_id
           LEFT JOIN playlist_tracks pt ON pt.track_id = t.track_id
-          LEFT JOIN genres g    ON g.genre_id = pt.genre_id
-          WHERE t.track_popularity >= ${minPop}
+          LEFT JOIN genres g ON g.genre_id = pt.genre_id
+          WHERE t.track_popularity >= ${minPopularity}
           GROUP BY t.track_id, t.track_name, a.artist_name, t.track_popularity,
                    af.danceability, af.energy, af.loudness, af.speechiness,
                    af.acousticness, af.instrumentalness, af.liveness, af.valence, af.tempo
@@ -202,12 +422,11 @@ async function loadCandidates(sql, genre, minPop) {
                  t.track_popularity,
                  af.danceability, af.energy, af.loudness, af.speechiness,
                  af.acousticness, af.instrumentalness, af.liveness, af.valence, af.tempo
-          FROM tracks t
-          JOIN artists a        ON a.artist_id = t.artist_id
+          FROM tracks t JOIN artists a ON a.artist_id = t.artist_id
           JOIN audio_features af ON af.track_id = t.track_id
           LEFT JOIN playlist_tracks pt ON pt.track_id = t.track_id
-          LEFT JOIN genres g    ON g.genre_id = pt.genre_id
-          WHERE t.track_popularity >= ${minPop}
+          LEFT JOIN genres g ON g.genre_id = pt.genre_id
+          WHERE t.track_popularity >= ${minPopularity}
           GROUP BY t.track_id, t.track_name, a.artist_name, t.track_popularity,
                    af.danceability, af.energy, af.loudness, af.speechiness,
                    af.acousticness, af.instrumentalness, af.liveness, af.valence, af.tempo
@@ -215,183 +434,149 @@ async function loadCandidates(sql, genre, minPop) {
   }
 }
 
-// ── Score and rank candidates against a preference vector ─────────────────
-
-function scoreAndRank(candidates, userRawVector, userGenres, excludeIds, limit) {
-  if (!candidates || candidates.length === 0) {
-    return { recommendations: [], stats: { total_candidates: 0, returned: 0, excluded_liked: excludeIds.size } };
+function resolveUserVector(profile, likedRows, mode) {
+  const taste = parseJsonValue(profile?.taste_representation);
+  const personalizedVector = Array.isArray(taste?.raw_vector) && taste.raw_vector.length === FEATURES.length
+    && taste.raw_vector.every((value) => Number.isFinite(Number(value)))
+    ? taste.raw_vector.map(Number)
+    : null;
+  const baselineVector = parseJsonValue(profile?.preference_vector);
+  const validBaseline = Array.isArray(baselineVector) && baselineVector.length === FEATURES.length
+    && baselineVector.every((value) => Number.isFinite(Number(value)))
+    ? baselineVector.map(Number)
+    : null;
+  if (mode === 'personalized_recommender' && personalizedVector) return personalizedVector;
+  if (validBaseline) return validBaseline;
+  if (likedRows.length > 0) {
+    return FEATURES.map((feature) => (
+      likedRows.reduce((sum, row) => sum + Number(row[feature] || 0), 0) / likedRows.length
+    ));
   }
+  return null;
+}
 
-  const scalingParams = computeScalingParams(candidates);
-  const userScaled = standardize(userRawVector, scalingParams);
-
-  const scored = [];
-  for (const track of candidates) {
-    if (excludeIds.has(track.track_id)) continue;
-
-    const trackRaw = FEATURES.map((f) => Number(track[f]) || 0);
-    const trackScaled = standardize(trackRaw, scalingParams);
-    const score = cosineSimilarity(userScaled, trackScaled);
-
-    scored.push({ track, trackRaw, score });
+function runRecommendationPipeline(catalog, userRawVector, options) {
+  const preprocessing = loadCanonicalPreprocessing();
+  if (!preprocessing) {
+    throw new Error('Canonical recommendation preprocessing artifact is unavailable. Deploy ml/artifacts/preprocessing.json.');
   }
-
-  // Sort by similarity descending
-  scored.sort((a, b) => b.score - a.score);
-
-  // Build top N results with explainability
-  const topN = scored.slice(0, limit);
-  const recommendations = topN.map((item, idx) => {
-    const { track, trackRaw, score } = item;
-    const explanation = buildExplanation(userRawVector, trackRaw, scalingParams, track.genre_name, userGenres);
-
-    return {
-      rank: idx + 1,
-      track_id: track.track_id,
-      track_name: track.track_name,
-      artist_name: track.artist_name,
-      genre_name: track.genre_name || null,
-      track_popularity: track.track_popularity,
-      similarity_score: Math.round(score * 10000) / 10000,
-      similarity_pct: Math.round(score * 1000) / 10,
-      audio_features: {
-        danceability: track.danceability,
-        energy: track.energy,
-        loudness: track.loudness,
-        valence: track.valence,
-        tempo: track.tempo,
-        acousticness: track.acousticness,
-        speechiness: track.speechiness,
-        instrumentalness: track.instrumentalness,
-        liveness: track.liveness,
-      },
-      explanation,
-    };
-  });
-
+  const config = loadRecommendationConfig();
+  const limit = Math.min(Math.max(Number.parseInt(options.limit, 10) || 20, 1), 50);
+  const mode = options.mode === 'baseline_content_recommender'
+    ? 'baseline_content_recommender'
+    : 'personalized_recommender';
+  const seedArtists = options.excludeSeedArtists
+    ? (parseJsonValue(options.topArtists) || []).map((artist) => artist.artist || artist.artist_name)
+    : [];
+  const context = {
+    config,
+    preprocessing,
+    mode,
+    limit,
+    userRawVector,
+    userVector: null,
+    dominantGenres: parseJsonValue(options.dominantGenres) || {},
+    topArtists: parseJsonValue(options.topArtists) || [],
+    excludeTrackIds: new Set(options.excludeTrackIds || []),
+    excludeArtistNames: new Set([...(options.excludeArtists || []), ...seedArtists].map(normalizeName)),
+  };
+  context.userVector = transformForMode(userRawVector, context);
+  const retrieved = retrieveCandidates(catalog, context);
+  const ranked = mode === 'personalized_recommender'
+    ? rankCandidates(retrieved, context)
+    : rankBaselineCandidates(retrieved);
+  const reranked = mode === 'personalized_recommender'
+    ? rerankForDiversity(ranked, context)
+    : ranked.slice(0, limit);
   return {
-    recommendations,
+    recommendations: buildRecommendations(reranked, context),
+    recommender_mode: mode,
     stats: {
-      total_candidates: candidates.length,
-      returned: recommendations.length,
-      excluded_liked: excludeIds.size,
+      total_candidates: catalog.length,
+      retrieved_candidates: retrieved.length,
+      ranked_candidates: ranked.length,
+      returned: reranked.length,
+      excluded_liked: context.excludeTrackIds.size,
     },
   };
 }
 
-// ── Main recommendation function ──────────────────────────────────────────
-
-/**
- * Generate server-side personalized recommendations for a user.
- *
- * @param {string} userId
- * @param {{ limit?: number, genre?: string, minPopularity?: number }} opts
- * @returns {{ recommendations: Array, stats: object, noProfileReason?: string }}
- */
 async function generateRecommendations(userId, opts = {}) {
-  const limit = Math.min(Math.max(parseInt(opts.limit) || 20, 1), 50);
+  const limit = Math.min(Math.max(Number.parseInt(opts.limit, 10) || 20, 1), 50);
   const genre = opts.genre || null;
-  const minPop = Math.min(Math.max(parseInt(opts.minPopularity) || 0, 0), 100);
-
+  const minPopularity = Math.min(Math.max(Number.parseInt(opts.minPopularity, 10) || 0, 0), 100);
+  const requestedMode = opts.mode === 'baseline_content_recommender'
+    ? 'baseline_content_recommender'
+    : 'personalized_recommender';
   const sql = getDb();
-
-  // ── 1. Load user preference vector ────────────────────────────────────
   const profileRows = await sql`
-    SELECT preference_vector, dominant_genres, raw_feature_means
-    FROM user_profile_data
-    WHERE user_id = ${userId}
-    LIMIT 1
+    SELECT preference_vector, taste_representation, dominant_genres, top_artists
+    FROM user_profile_data WHERE user_id = ${userId} LIMIT 1
   `;
-
-  // ── 2. Also load manually liked tracks for blending ───────────────────
   const likedRows = await sql`
-    SELECT
-      af.danceability, af.energy, af.loudness, af.speechiness,
-      af.acousticness, af.instrumentalness, af.liveness, af.valence, af.tempo
-    FROM user_liked_tracks ult
-    JOIN audio_features af ON af.track_id = ult.catalog_track_id
-    WHERE ult.user_id = ${userId}
-    LIMIT 100
+    SELECT af.danceability, af.energy, af.loudness, af.speechiness,
+           af.acousticness, af.instrumentalness, af.liveness, af.valence, af.tempo
+    FROM user_liked_tracks ult JOIN audio_features af ON af.track_id = ult.catalog_track_id
+    WHERE ult.user_id = ${userId} LIMIT 100
   `.catch(() => []);
-
-  const hasProfile = profileRows.length > 0 && profileRows[0].preference_vector;
-  const hasLikes   = likedRows.length > 0;
-
-  if (!hasProfile && !hasLikes) {
+  const profile = profileRows[0] || null;
+  const persistedTaste = parseJsonValue(profile?.taste_representation);
+  const hasPersonalizedTaste = Array.isArray(persistedTaste?.raw_vector)
+    && persistedTaste.raw_vector.length === FEATURES.length
+    && persistedTaste.raw_vector.every((value) => Number.isFinite(Number(value)));
+  const mode = requestedMode === 'personalized_recommender' && hasPersonalizedTaste
+    ? 'personalized_recommender'
+    : 'baseline_content_recommender';
+  const userRawVector = resolveUserVector(profile, likedRows, mode);
+  if (!userRawVector) {
     return {
       recommendations: [],
-      stats: { total_candidates: 0, returned: 0 },
+      stats: { total_candidates: 0, retrieved_candidates: 0, ranked_candidates: 0, returned: 0 },
       noProfileReason: 'Connect Spotify and run your music analysis first, or like some catalog tracks.',
     };
   }
-
-  // Blend preference_vector with liked track vectors (equal weight)
-  let userRawVector;
-  if (hasProfile) {
-    const pv = Array.isArray(profileRows[0].preference_vector)
-      ? profileRows[0].preference_vector
-      : JSON.parse(profileRows[0].preference_vector);
-
-    if (hasLikes) {
-      // Average profile vector with mean of liked vectors
-      const likedMeans = FEATURES.map((feat, i) => {
-        const vals = likedRows.map((r) => Number(r[feat])).filter((v) => !isNaN(v));
-        return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : pv[i];
-      });
-      userRawVector = FEATURES.map((_, i) => (pv[i] + likedMeans[i]) / 2);
-    } else {
-      userRawVector = pv;
-    }
-  } else {
-    // Likes only
-    userRawVector = FEATURES.map((feat) => {
-      const vals = likedRows.map((r) => Number(r[feat])).filter((v) => !isNaN(v));
-      return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0.5;
-    });
-  }
-
-  const userGenres = hasProfile
-    ? (profileRows[0].dominant_genres || {})
-    : {};
-
-  // ── 3. Load liked track IDs to exclude from recommendations ───────────
   const likedIdRows = await sql`
     SELECT catalog_track_id FROM user_liked_tracks WHERE user_id = ${userId}
   `.catch(() => []);
-  const likedIds = new Set(likedIdRows.map((r) => r.catalog_track_id));
-
-  // ── 4. Load candidate tracks ───────────────────────────────────────────
-  const candidates = await loadCandidates(sql, genre, minPop);
-
-  // ── 5–8. Score, rank, explain ──────────────────────────────────────────
-  return scoreAndRank(candidates, userRawVector, userGenres, likedIds, limit);
+  const catalog = await loadCandidates(sql, genre, minPopularity);
+  const result = runRecommendationPipeline(catalog, userRawVector, {
+    limit,
+    mode,
+    dominantGenres: profile?.dominant_genres,
+    topArtists: profile?.top_artists,
+    excludeTrackIds: likedIdRows.map((row) => row.catalog_track_id),
+    excludeArtists: opts.excludeArtists,
+    excludeSeedArtists: opts.excludeSeedArtists,
+  });
+  return {
+    ...result,
+    taste_profile_metadata: persistedTaste?.metadata || null,
+  };
 }
 
-// ── Vector-based recommendations (used by Friend Blend) ───────────────────
-
-/**
- * Generate recommendations from a custom preference vector.
- * Same algorithm as generateRecommendations but accepts a pre-computed vector
- * instead of loading one from user_profile_data.
- *
- * @param {number[]} userRawVector - 9-dim raw feature means
- * @param {{ limit?, genre?, minPopularity?, excludeTrackIds?: string[], userGenres?: object }} opts
- */
 async function generateRecommendationsFromVector(userRawVector, opts = {}) {
-  const limit = Math.min(Math.max(parseInt(opts.limit) || 20, 1), 50);
-  const genre = opts.genre || null;
-  const minPop = Math.min(Math.max(parseInt(opts.minPopularity) || 0, 0), 100);
-  const excludeIds = new Set(opts.excludeTrackIds || []);
-  const userGenres = opts.userGenres || {};
-
   const sql = getDb();
-  const candidates = await loadCandidates(sql, genre, minPop);
-  return scoreAndRank(candidates, userRawVector, userGenres, excludeIds, limit);
+  const catalog = await loadCandidates(sql, opts.genre || null, Math.min(Math.max(Number.parseInt(opts.minPopularity, 10) || 0, 0), 100));
+  return runRecommendationPipeline(catalog, userRawVector, {
+    limit: opts.limit,
+    mode: 'baseline_content_recommender',
+    dominantGenres: opts.userGenres,
+    topArtists: opts.topArtists,
+    excludeTrackIds: opts.excludeTrackIds,
+    excludeArtists: opts.excludeArtists,
+    excludeSeedArtists: opts.excludeSeedArtists,
+  });
 }
 
 module.exports = {
   generateRecommendations,
   generateRecommendationsFromVector,
+  retrieveCandidates,
+  rankCandidates,
+  rankBaselineCandidates,
+  rerankForDiversity,
+  buildRecommendations,
+  loadCanonicalPreprocessing,
   FEATURES,
   cosineSimilarity,
   computeScalingParams,

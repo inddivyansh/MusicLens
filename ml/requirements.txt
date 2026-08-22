@@ -1,0 +1,8 @@
+# This project already pins these dependencies at the repository root.
+# Kept here so the ML package can be installed independently if desired.
+numpy==2.5.2
+pandas==2.3.3
+scikit-learn==1.9.0
+joblib==1.5.3
+pyarrow==25.0.1
+

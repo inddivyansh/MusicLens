@@ -1,0 +1,32 @@
+{
+  "feature_columns": [
+    "danceability",
+    "energy",
+    "loudness",
+    "speechiness",
+    "acousticness",
+    "instrumentalness",
+    "liveness",
+    "valence",
+    "tempo"
+  ],
+  "explained_variance_threshold": 0.95,
+  "random_state": 42,
+  "aggregation": {
+    "source_weights": {
+      "long_term": 1.0,
+      "recent": 1.0,
+      "liked": 1.0
+    },
+    "temporal_decay_lambda_per_day": 0.08,
+    "frequency_cap": 10,
+    "source_precedence": [
+      "liked",
+      "recent",
+      "long_term"
+    ],
+    "decay_sources": [
+      "recent"
+    ]
+  }
+}

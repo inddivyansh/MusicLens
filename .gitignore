@@ -100,4 +100,11 @@ build_output.txt
 # data/*.csv is ignored above; these JSON files are the deployed payload.
 !frontend/public/analytics/
 !frontend/public/analytics/*.json
+
+# --- Versioned ML inference artifacts (produced by ml training) ---
+!ml/artifacts/
+!ml/artifacts/*.joblib
+!ml/artifacts/*.json
+!ml/data/
+!ml/data/README.md
 frontend/public/analytics/*.png

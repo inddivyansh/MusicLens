@@ -1,0 +1,23 @@
+{
+  "retrieval": {
+    "candidate_limit": 500
+  },
+  "ranking": {
+    "weights": {
+      "audio_similarity": 0.8,
+      "genre_affinity": 0.08,
+      "artist_affinity": 0.04,
+      "popularity_prior": 0.02,
+      "novelty": 0.06
+    }
+  },
+  "diversity": {
+    "mmr_lambda": 0.75,
+    "max_per_artist": 2,
+    "genre_repeat_penalty": 0.04,
+    "exclude_seed_artists": false
+  },
+  "novelty": {
+    "method": "inverse_log_catalog_popularity"
+  }
+}

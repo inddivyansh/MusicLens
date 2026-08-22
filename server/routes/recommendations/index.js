@@ -1,8 +1,8 @@
 /**
  * server/routes/recommendations/index.js
  * GET /api/recommendations
- * Returns personalized MusicLens recommendations based on the user's persisted
- * preference_vector (from POST /api/profile/refresh) blended with manual likes.
+ * Returns baseline or source-aware personalized recommendations through the
+ * server-side retrieval → ranking → diversity re-ranking pipeline.
  */
 
 'use strict';
@@ -36,11 +36,17 @@ module.exports = async function recommendations(req, res) {
   const limitRaw   = req.query?.limit         || urlObj.searchParams.get('limit')         || '20';
   const genreRaw   = req.query?.genre         || urlObj.searchParams.get('genre')         || '';
   const minPopRaw  = req.query?.minPopularity || urlObj.searchParams.get('minPopularity') || '0';
+  const modeRaw    = req.query?.mode          || urlObj.searchParams.get('mode')          || 'personalized';
+  const excludeSeedArtists = (req.query?.excludeSeedArtists === 'true')
+    || (urlObj.searchParams.get('excludeSeedArtists') === 'true');
   const save       = (req.query?.save === 'true') || (urlObj.searchParams.get('save') === 'true');
 
   const limit         = Math.min(50, Math.max(1,  parseInt(limitRaw)  || 20));
   const minPopularity = Math.min(90, Math.max(0,  parseInt(minPopRaw) || 0));
   const genre         = genreRaw ? String(genreRaw).replace(/[^a-zA-Z0-9& ]/g, '').slice(0, 30).trim() || null : null;
+  const mode = String(modeRaw).toLowerCase() === 'baseline'
+    ? 'baseline_content_recommender'
+    : 'personalized_recommender';
 
   let result;
   try {
@@ -48,6 +54,8 @@ module.exports = async function recommendations(req, res) {
       limit,
       genre,
       minPopularity,
+      mode,
+      ...(excludeSeedArtists ? { excludeSeedArtists: true } : {}),
     });
   } catch (err) {
     console.error('[recommendations] engine error:', err.message);
@@ -66,7 +74,7 @@ module.exports = async function recommendations(req, res) {
           ${session.userId},
           ${JSON.stringify(trackIds)},
           ${JSON.stringify(scores)},
-          ${JSON.stringify({ genre: genre || null, min_popularity: minPopularity, limit })}
+          ${JSON.stringify({ genre: genre || null, min_popularity: minPopularity, limit, mode, exclude_seed_artists: excludeSeedArtists })}
         )
       `;
     } catch (err) {

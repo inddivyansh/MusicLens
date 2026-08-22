@@ -81,13 +81,15 @@ export const profileApi = {
 export const recommendationsApi = {
   /**
    * GET /api/recommendations
-   * @param {{ limit?, genre?, minPopularity?, save? }} opts
+   * @param {{ limit?, genre?, minPopularity?, mode?, excludeSeedArtists?, save? }} opts
    */
   get: (opts = {}) => {
     const params = new URLSearchParams();
     if (opts.limit)         params.set('limit',         String(opts.limit));
     if (opts.genre)         params.set('genre',         opts.genre);
     if (opts.minPopularity) params.set('minPopularity', String(opts.minPopularity));
+    if (opts.mode)          params.set('mode',          opts.mode);
+    if (opts.excludeSeedArtists) params.set('excludeSeedArtists', 'true');
     if (opts.save)          params.set('save',          'true');
     const qs = params.toString();
     return request('GET', `/api/recommendations${qs ? '?' + qs : ''}`);

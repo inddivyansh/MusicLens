@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS user_profile_data (
     audio_profile       JSONB,       -- avg feature values + % breakdowns
     raw_feature_means   JSONB,       -- { danceability: 0.72, energy: 0.65, ... }
     preference_vector   JSONB,       -- 9-dim normalized vector for recommendations
+    taste_representation JSONB,      -- source-aware raw vector + sample-size metadata
     dominant_genres     JSONB,       -- { pop: 45.0, rock: 30.0, ... }
     dominant_subgenres  JSONB,
     top_artists         JSONB,       -- [{ artist, track_count }, ...]
@@ -158,6 +159,10 @@ CREATE TABLE IF NOT EXISTS user_profile_data (
 COMMENT ON TABLE user_profile_data IS 'Persisted MusicLens profile computed from matched Spotify tracks. All columns are MusicLens-derived aggregates — no raw Spotify audio content.';
 COMMENT ON COLUMN user_profile_data.preference_vector IS '9-dim mean feature vector for the recommendation engine (Prompt 4).';
 COMMENT ON COLUMN user_profile_data.raw_feature_means IS 'Unscaled averages of the 9 RECOMMENDATION_FEATURES across all matched tracks.';
+COMMENT ON COLUMN user_profile_data.taste_representation IS 'Source-aware personalized taste representation for enhanced ranking; stores aggregate vectors and counts only.';
+
+-- Safe for databases that already created user_profile_data before this column.
+ALTER TABLE user_profile_data ADD COLUMN IF NOT EXISTS taste_representation JSONB;
 
 -- ============================================================
 -- Phase 4: Recommendations + Recap tables

@@ -39,7 +39,7 @@ module.exports = async function getProfile(req, res) {
       sql`
         SELECT
           tracks_analyzed, tracks_matched, tracks_unmatched, tracks_ambiguous,
-          coverage_pct, audio_profile, raw_feature_means, preference_vector,
+          coverage_pct, audio_profile, raw_feature_means, preference_vector, taste_representation,
           dominant_genres, dominant_subgenres, top_artists, mood_distribution,
           archetype, archetype_tagline, archetype_desc,
           last_spotify_sync, last_refreshed_at
