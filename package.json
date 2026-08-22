@@ -22,7 +22,7 @@
   "jest": {
     "testEnvironment": "node",
     "testMatch": ["**/tests/api/**/*.test.js"],
-    "collectCoverageFrom": ["api/**/*.js"],
+    "collectCoverageFrom": ["server/**/*.js", "api/**/*.js"],
     "testTimeout": 10000
   }
 }

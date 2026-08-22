@@ -25,10 +25,10 @@ jest.mock('@neondatabase/serverless', () => ({
 global.fetch = jest.fn();
 
 // ── Import handlers after mocks ────────────────────────────────────────────
-const connect    = require('../../api/spotify/connect');
-const callback   = require('../../api/spotify/callback');
-const status     = require('../../api/spotify/status');
-const disconnect = require('../../api/spotify/disconnect');
+const connect    = require('../../server/routes/spotify/connect');
+const callback   = require('../../server/routes/spotify/callback');
+const status     = require('../../server/routes/spotify/status');
+const disconnect = require('../../server/routes/spotify/disconnect');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function makeReq(method, opts = {}) {
@@ -73,6 +73,7 @@ function setEnv() {
 }
 
 beforeEach(() => {
+  mockSql.mockReset();
   jest.clearAllMocks();
   setEnv();
 });
@@ -83,9 +84,6 @@ beforeEach(() => {
 describe('GET /api/spotify/connect', () => {
 
   test('401 — unauthenticated request is rejected before any OAuth logic', async () => {
-    // No session cookie → validateSession returns null immediately
-    mockSql.mockResolvedValueOnce([]); // no session row
-
     const req = httpMocks.createRequest({ method: 'GET', url: '/api/spotify/connect', headers: { host: 'localhost' } });
     const res = makeRes();
 
@@ -431,8 +429,6 @@ describe('GET /api/spotify/status', () => {
 describe('POST /api/spotify/disconnect', () => {
 
   test('401 — unauthenticated request', async () => {
-    mockSql.mockResolvedValueOnce([]); // no session
-
     const req = httpMocks.createRequest({
       method: 'POST', url: '/api/spotify/disconnect', headers: { host: 'localhost' },
     });

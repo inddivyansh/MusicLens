@@ -5,12 +5,34 @@
 ```
 Browser (React 18 + Vite)
       ↓ HTTPS only, credentials:include
-Vercel Serverless Functions (/api/*)
-      ↓ Neon WebSocket driver
+Vercel Single Catch-All Function (/api/[...path].js)
+      ↓ Central Dispatcher (server/router.js)
+Modular Internal Route Handlers (server/routes/*)
+      ↓ Database & Cryptographic Libraries (server/lib/*)
 Neon PostgreSQL
   ├── Music warehouse (tracks, audio_features, artists, ...)  ← read-only from app
   └── Application tables (users, sessions, spotify_connections, ...)
 ```
+
+---
+
+## Vercel Serverless Architecture
+
+To remain well within the **Vercel Hobby plan limit of 12 Serverless Functions**, MusicLens consolidates all API routing into **exactly 1 Serverless Function**:
+
+- **Entry Point**: `api/[...path].js` is the sole Vercel Serverless Function entry point deployed to the Vercel Edge/Serverless platform.
+- **Routing & Dispatch**: `api/[...path].js` immediately invokes `server/router.js`, which inspects `req.method`, `req.url`, and path parameters to route incoming requests to the appropriate modular handler.
+- **Internal Modular Structure**: All actual business logic, endpoints, and shared libraries live entirely outside the `api/` directory under `server/`:
+  - `server/routes/auth/` — User registration, login, logout, and current session inspection.
+  - `server/routes/spotify/` — Spotify OAuth connect, callback, connection status, and disconnect flows.
+  - `server/routes/profile/` — Profile retrieval, Spotify data sync & feature calculation, and track likes.
+  - `server/routes/recommendations/` — Personalized catalog recommendation engine.
+  - `server/routes/recap/` — MusicLens Recap aggregation and factual taste highlights.
+  - `server/routes/blend/` — Friend Blend creation, token join, and taste comparison.
+  - `server/routes/analytics/` — Dataset aggregate statistics and audio distributions.
+  - `server/lib/` — Reusable, database, session, encryption, recommender, and Spotify client modules.
+
+This architecture ensures clean separation of concerns, high testability, zero route duplication, and reliable deployment on Vercel Hobby.
 
 ---
 

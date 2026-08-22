@@ -28,10 +28,10 @@ jest.mock('bcryptjs', () => ({
 }));
 
 // ── Import after mocks are set ─────────────────────────────────────────────
-const register = require('../../api/auth/register');
-const login    = require('../../api/auth/login');
-const logout   = require('../../api/auth/logout');
-const me       = require('../../api/auth/me');
+const register = require('../../server/routes/auth/register');
+const login    = require('../../server/routes/auth/login');
+const logout   = require('../../server/routes/auth/logout');
+const me       = require('../../server/routes/auth/me');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function makeReq(method, body = {}, cookies = {}) {
